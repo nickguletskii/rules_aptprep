@@ -1,3 +1,5 @@
+"""Rule implementations for aptprep package trees and sysroots."""
+
 def _aptprep_lockfile_impl(ctx):
     """Generate a lockfile from an aptprep config file using the aptprep binary."""
     config = ctx.file.config
