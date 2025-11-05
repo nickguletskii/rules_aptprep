@@ -1,0 +1,19 @@
+output:
+  path: "./packages"
+  target_architectures: ["amd64"]
+
+source_repositories:
+  - source_url: "https://snapshot.ubuntu.com/ubuntu/20251029T140000Z"
+    architectures: ["amd64"]
+    distributions: ["noble", "noble-updates"]
+
+packages:
+  - "build-essential"
+  - "linux-image-generic"
+  - "linux-headers-generic"
+  - "wget"
+  - "curl"
+  - "git"
+  - "bash"
+  - "dash"
+  - "ncdu"

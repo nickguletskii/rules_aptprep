@@ -1,0 +1,40 @@
+load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+
+# Export template files
+exports_files([
+    "toolchain_toolchains.BUILD.tpl",
+    "package.BUILD.tpl",
+    "debian_package.BUILD.tpl",
+    "sysroot.BUILD.tpl",
+])
+
+bzl_library(
+    name = "toolchains_repo",
+    srcs = ["toolchains_repo.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
+)
+
+bzl_library(
+    name = "versions",
+    srcs = ["versions.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
+)
+
+bzl_library(
+    name = "resolved_toolchain",
+    srcs = ["resolved_toolchain.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
+)
+
+bzl_library(
+    name = "packages_repo",
+    srcs = ["packages_repo.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
+    deps = ["@bazel_tools//tools/build_defs/repo:http.bzl"],
+)
+
+bzl_library(
+    name = "sysroot_repo",
+    srcs = ["sysroot_repo.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
+)
