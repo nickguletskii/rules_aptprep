@@ -207,7 +207,7 @@ aptprep_main_repo = repository_rule(
     },
 )
 
-def _aptprep_fake_repo_impl():
+def _aptprep_fake_repo_impl(_repository_ctx):
     pass
 
 aptprep_fake_repo = repository_rule(

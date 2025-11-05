@@ -163,7 +163,7 @@
   "moduleExtensions": {
     "@@rules_aptprep+//aptprep:extensions.bzl%aptprep": {
       "general": {
-        "bzlTransitiveDigest": "tAf8GAKIs7TeJfml74DDnTGpRNeE7FcNGwe1E6qHmzo=",
+        "bzlTransitiveDigest": "2HIB5LQ9EO0q2nJxxqbMcNom2tz49e/MLsoEv050I/g=",
         "usagesDigest": "DM3+LqNmRaEMONf8FhHS3dCW2WnMDVLer0sFJRAH1Lg=",
         "recordedFileInputs": {
           "@@//lockfile.json": "51b077dcc00ccc4628f62bb6837ada4b0e5d6a7e4c57e0946c92abc6a7a02d71"
