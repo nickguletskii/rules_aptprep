@@ -1,4 +1,5 @@
-load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
+"""Repository implementations for aptprep package trees and sysroots."""
+
 load("//aptprep/private:toolchains_repo.bzl", "toolchains_repo")
 
 # Repository rule for user-provided aptprep archives
@@ -9,6 +10,7 @@ def _aptprep_archive_repo_impl(repository_ctx):
         sha256 = repository_ctx.attr.sha256,
         stripPrefix = repository_ctx.attr.strip_prefix,
     )
+
     # Determine the binary name based on platform
     binary_name = repository_ctx.attr.binary_name
     if not binary_name:
@@ -50,6 +52,7 @@ def aptprep_register_toolchains(name, url, sha256, strip_prefix = None, binary_n
         toolchains_repo_name: optional custom name for the toolchains repository.
             If not provided, defaults to "{name}_toolchains"
     """
+
     # Create the archive repository
     aptprep_archive_repo(
         name = name,

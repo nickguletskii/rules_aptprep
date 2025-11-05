@@ -60,6 +60,7 @@ aptprep.toolchain(
 ```
 
 This creates two repositories:
+
 - `aptprep_binary_archive`: Contains the downloaded aptprep binary
 - `aptprep_toolchains`: Contains toolchain registration targets for Bazel
 
@@ -91,6 +92,7 @@ aptprep.sysroot(
 ```
 
 This creates a repository `@my_sysroot` containing:
+
 - All requested packages and their transitive dependencies
 - Complete directory structure as if installed by dpkg
 - Fixed symlinks (no absolute paths)

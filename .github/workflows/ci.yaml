@@ -24,7 +24,6 @@ jobs:
     outputs:
       # Will look like ["ubuntu-latest", "windows-latest", "macos-latest"]
       os: ${{ toJSON(steps.*.outputs.os) }}
-
   matrix-prep-bazelversion:
     # Prepares the 'bazelversion' axis of the test matrix
     runs-on: ubuntu-latest
@@ -38,11 +37,9 @@ jobs:
   test:
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
-
     needs:
       - matrix-prep-bazelversion
       - matrix-prep-os
-
     # Run bazel test in each workspace with each version of Bazel supported
     strategy:
       fail-fast: false
@@ -51,13 +48,11 @@ jobs:
         bazelversion: ${{ fromJSON(needs.matrix-prep-bazelversion.outputs.bazelversions) }}
         folder: [".", "e2e/smoke"]
         bzlmodEnabled: [true]
-        exclude: [{ "folder": ".", "bzlmodEnabled": false }]
-
+        exclude: [{"folder": ".", "bzlmodEnabled": false}]
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
-
       - uses: bazel-contrib/setup-bazel@0.8.0
         with:
           repository-cache: true
@@ -65,19 +60,16 @@ jobs:
             common --announce_rc
             common --color=yes
             common --enable_bzlmod=${{ matrix.bzlmodEnabled }}
-
       - name: Configure bazelrc --enable_workspace (bazelversion >= 7.1.0)
         working-directory: ${{ matrix.folder }}
         if: ${{ !matrix.bzlmodEnabled && !startsWith(matrix.bazelversion, '6.') && !startsWith(matrix.bazelversion, '7.0.') }}
         run: |
           echo "common --enable_workspace" >> .bazelrc
-
       - name: Configure Bazel version
         working-directory: ${{ matrix.folder }}
         run: |
           echo "${{ matrix.bazelversion }}" > .bazelversion
           bazel version
-
       - name: Check for test.sh
         # Checks for the existence of test.sh in the folder. Downstream steps can use
         # steps.has_test_sh.outputs.files_exists as a conditional.
@@ -85,16 +77,13 @@ jobs:
         uses: andstor/file-existence-action@v3
         with:
           files: "${{ matrix.folder }}/test.sh"
-
       # See https://github.com/bazel-contrib/publish-to-bcr#including-patches
       - name: verify bcr patches
         if: matrix.bzlmodEnabled && hashFiles('.bcr/patches/*.patch') != '' && ! startsWith(matrix.os, 'windows')
         run: patch --dry-run -p1 --fuzz 0 < .bcr/patches/*.patch
-
       - name: Test
         working-directory: ${{ matrix.folder }}
         run: "bazel test //..."
-
       - name: Run ./test.sh
         # Run if there is a test.sh file in the folder
         # Don't run integration tests on Windows since they are bash scripts and Windows runs Powershell

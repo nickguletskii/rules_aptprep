@@ -29,4 +29,3 @@ sh_test(
         "@aptprep_smoke_sysroot//:sysroot",
     ],
 )
-

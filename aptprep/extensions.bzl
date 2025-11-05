@@ -1,9 +1,9 @@
 """Module extension for aptprep lockfile integration and toolchain support."""
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load(":repositories.bzl", "aptprep_register_toolchains")
 load("//aptprep/private:packages_repo.bzl", "aptprep_fake_repo", "aptprep_main_repo", "generate_packages_mapping_with_prefix")
 load("//aptprep/private:sysroot_repo.bzl", "aptprep_sysroot")
+load(":repositories.bzl", "aptprep_register_toolchains")
 
 # Template for Debian package repository in extension
 _DEBIAN_PACKAGE_BUILD_TEMPLATE = """\"\"\"Debian package repository for {package_name}.\"\"\"
@@ -69,6 +69,7 @@ def _aptprep_extension_impl(module_ctx):
     - Package repositories from lockfiles
     - Sysroot repositories
     """
+
     # Process toolchain tags first
     for module in module_ctx.modules:
         for tag in module.tags.toolchain:
@@ -101,8 +102,6 @@ def _aptprep_extension_impl(module_ctx):
                     name = repo_name,
                     repo_name = repo_name,
                 )
-
-                print("Lockfile {} does not exist, skipping.".format(lockfile_label))
                 continue
             lockfile_content = module_ctx.read(lockfile_path)
 
@@ -154,7 +153,6 @@ def _aptprep_extension_impl(module_ctx):
                     name = repo_name,
                     repo_name = repo_name,
                 )
-                print("Lockfile {} does not exist, skipping.".format(lockfile_label))
                 continue
             lockfile_content = module_ctx.read(lockfile_path)
 
@@ -215,5 +213,5 @@ aptprep = module_extension(
         "sysroot": _sysroot_tag,
         "toolchain": _toolchain_tag,
     },
-    doc = "Extension for importing aptprep lockfiles and registering aptprep toolchains"
+    doc = "Extension for importing aptprep lockfiles and registering aptprep toolchains",
 )

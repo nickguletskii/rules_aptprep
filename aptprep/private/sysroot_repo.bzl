@@ -20,6 +20,7 @@ def _list_tar_files(rctx, tar_path, tar_tool):
 
 def _extract_sysroot_package(rctx, data_tar_path, tar_tool):
     """Extract a single package's data into the sysroot."""
+
     # Extract using tar
     cmd = [tar_tool, "-xf", str(data_tar_path)]
     result = rctx.execute(cmd)
@@ -31,8 +32,9 @@ def _extract_sysroot_package(rctx, data_tar_path, tar_tool):
             result.stderr,
         ))
 
-def _fix_sysroot_symlinks(rctx, tar_tool):
+def _fix_sysroot_symlinks(rctx):
     """Fix symlinks in the sysroot to not reference absolute paths."""
+
     # Find all symlinks and fix them
     find_result = rctx.execute(["find", ".", "-type", "l"])
     if find_result.return_code == 0:
@@ -44,6 +46,7 @@ def _fix_sysroot_symlinks(rctx, tar_tool):
                 if target.startswith("/"):
                     # Absolute path, make it relative
                     rctx.execute(["rm", symlink_path])
+
                     # Calculate relative path from the symlink location
                     depth = symlink_path.count("/") - 1
                     relative_prefix = "/".join([".."] * depth)
@@ -56,8 +59,6 @@ def _aptprep_sysroot_impl(repository_ctx):
     packages_mapping_json = repository_ctx.attr.packages_mapping
     packages_data_json = repository_ctx.attr.packages_data
     architecture = repository_ctx.attr.architecture
-    fix_rpath = repository_ctx.attr.fix_rpath_with_patchelf
-    add_files = repository_ctx.attr.add_files
     extra_links = repository_ctx.attr.extra_links
 
     # Get tar tool
@@ -144,7 +145,7 @@ def _aptprep_sysroot_impl(repository_ctx):
         # First, extract the deb file to get the data.tar.*
         deb_extract_result = repository_ctx.execute(
             ["ar", "x", "../{}".format(deb_filename)],
-            working_directory = pkg_extract_dir
+            working_directory = pkg_extract_dir,
         )
         if deb_extract_result.return_code != 0:
             fail("Failed to extract deb file {}: {}".format(deb_filename, deb_extract_result.stderr))
@@ -172,7 +173,7 @@ def _aptprep_sysroot_impl(repository_ctx):
         repository_ctx.execute(["rm", "-rf", pkg_extract_dir])
 
     # Fix symlinks in the sysroot
-    _fix_sysroot_symlinks(repository_ctx, tar_tool)
+    _fix_sysroot_symlinks(repository_ctx)
 
     # Create the install manifest
     repository_ctx.file(
@@ -194,8 +195,8 @@ aptprep_sysroot = repository_rule(
         "packages_mapping": attr.string(mandatory = True, doc = "JSON mapping of package names to repository names"),
         "packages_data": attr.string(mandatory = True, doc = "JSON data of all packages from lockfile"),
         "architecture": attr.string(mandatory = True, doc = "Target architecture"),
-        "fix_rpath_with_patchelf": attr.bool(default = False, doc = "Whether to fix RPATH with patchelf"),
-        "add_files": attr.string_keyed_label_dict(default = {}, doc = "Additional files to add to sysroot"),
+        "fix_rpath_with_patchelf": attr.bool(default = False, doc = "Whether to fix RPATH with patchelf (TODO)"),
+        "add_files": attr.string_keyed_label_dict(default = {}, doc = "Additional files to add to sysroot (TODO)"),
         "extra_links": attr.string_dict(default = {}, doc = "Extra symlinks to create"),
     },
 )

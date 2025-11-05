@@ -7,6 +7,7 @@ load("//aptprep/private:versions.bzl", "TOOL_VERSIONS")
 
 def _smoke_test_impl(ctx):
     env = unittest.begin(ctx)
+
     # TOOL_VERSIONS is now empty by default since users provide their own
     asserts.equals(env, 0, len(TOOL_VERSIONS.keys()))
     return unittest.end(env)
