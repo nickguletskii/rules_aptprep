@@ -1,4 +1,4 @@
-"""This module implements the language-specific toolchain rule.
+"""This module implements the aptprep toolchain rule.
 """
 
 AptprepInfo = provider(
@@ -71,7 +71,7 @@ aptprep_toolchain = rule(
             mandatory = False,
         ),
     },
-    doc = """Defines an aptprep compiler/runtime toolchain.
+    doc = """Defines an aptprep toolchain.
 
 For usage see https://docs.bazel.build/versions/main/toolchains.html#defining-toolchains.
 """,

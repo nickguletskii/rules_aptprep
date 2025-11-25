@@ -18,22 +18,42 @@ def _list_tar_files(rctx, tar_path, tar_tool):
             files.append(line)
     return files
 
-def _extract_sysroot_package(rctx, data_tar_path, tar_tool):
-    """Extract a single package's data into the sysroot."""
-
-    # Extract using tar
-    cmd = [tar_tool, "-xf", str(data_tar_path)]
-    result = rctx.execute(cmd)
-    if result.return_code:
-        fail("Failed to extract package {}: ({}, {}, {})".format(
-            data_tar_path,
-            result.return_code,
-            result.stdout,
-            result.stderr,
-        ))
-
 def _fix_sysroot_symlinks(rctx):
-    """Fix symlinks in the sysroot to not reference absolute paths."""
+    """Fix symlinks in the sysroot to not reference absolute paths and prevent loops."""
+
+    # Helper function to check if a symlink would create a loop
+    def would_create_loop(symlink_path, target):
+        """Check if a symlink target would cause it to point to an ancestor directory."""
+
+        # Get the directory containing the symlink
+        symlink_parts = symlink_path.split("/")
+        symlink_dir_parts = symlink_parts[:-1]  # Remove the symlink filename
+
+        # Parse the target path
+        target_parts = target.split("/")
+
+        # Normalize the target relative to the symlink's directory
+        resolved_parts = list(symlink_dir_parts)
+        for part in target_parts:
+            if part == "..":
+                if resolved_parts:
+                    resolved_parts.pop()
+            elif part != "" and part != ".":
+                resolved_parts.append(part)
+
+        # Check if resolved path is the symlink's directory or an ancestor
+        # This prevents symlinks pointing to . (current dir) or .. (parent dir), etc.
+        # A loop occurs if the resolved path is at or above the symlink's directory
+        # We check if symlink_dir_parts starts with resolved_parts (i.e., resolved is an ancestor)
+        if len(resolved_parts) > len(symlink_dir_parts):
+            return False  # Target is deeper in tree, not an ancestor
+
+        # Check if symlink directory path starts with resolved path
+        for i in range(len(resolved_parts)):
+            if symlink_dir_parts[i] != resolved_parts[i]:
+                return False  # Different path, not an ancestor
+
+        return True  # Target is at or above symlink directory
 
     # Find all symlinks and fix them
     find_result = rctx.execute(["find", ".", "-type", "l"])
@@ -43,15 +63,26 @@ def _fix_sysroot_symlinks(rctx):
             readlink_result = rctx.execute(["readlink", symlink_path])
             if readlink_result.return_code == 0:
                 target = readlink_result.stdout.strip()
-                if target.startswith("/"):
-                    # Absolute path, make it relative
-                    rctx.execute(["rm", symlink_path])
+                if would_create_loop(symlink_path, target):
+                    rctx.delete(symlink_path)
 
-                    # Calculate relative path from the symlink location
-                    depth = symlink_path.count("/") - 1
-                    relative_prefix = "/".join([".."] * depth)
-                    new_target = relative_prefix + target
-                    rctx.execute(["ln", "-s", new_target, symlink_path])
+                    # print("Removed symlink that would create loop: {}".format(symlink_path))
+                    continue
+                if target.startswith("/"):
+                    # we get something like './some/path/lib.so` for `symlink_path`
+                    # so we subtract 2 for the leading `.` and the filename
+                    levels = [".." for _ in range(len(symlink_path.split("/")) - 2)]
+                    new_target = "/".join(levels) + target
+                    rctx.delete(symlink_path)
+
+                    # Only fix the symlink if it doesn't create a loop
+                    if not would_create_loop(symlink_path, new_target):
+                        # preferably this would be a`rctx.symlink(new_target, symlink_path)`
+                        # but that normalizes `new_target`
+                        rctx.execute(["ln", "-s", new_target, symlink_path])
+                    else:
+                        pass
+                        # print("Removed symlink that would create loop: {}".format(symlink_path))
 
 def _aptprep_sysroot_impl(repository_ctx):
     """Implementation for aptprep_sysroot repository rule."""
@@ -60,12 +91,10 @@ def _aptprep_sysroot_impl(repository_ctx):
     packages_data_json = repository_ctx.attr.packages_data
     architecture = repository_ctx.attr.architecture
     extra_links = repository_ctx.attr.extra_links
+    add_files = repository_ctx.attr.add_files
+    build_file = repository_ctx.attr.build_file
 
-    # Get tar tool
-    tar_tool = "tar"
-    result = repository_ctx.execute(["which", "tar"])
-    if result.return_code != 0:
-        tar_tool = "tar"  # Assume tar is available on the system
+    tar_tool = repository_ctx.which("tar")
 
     # Parse the packages mapping and package data from JSON
     packages_mapping = json.decode(packages_mapping_json)
@@ -77,8 +106,13 @@ def _aptprep_sysroot_impl(repository_ctx):
     # Create extra links first if specified
     for link_from, link_to in extra_links.items():
         dir_path = link_from.rsplit("/", 1)[0] if "/" in link_from else "."
-        repository_ctx.execute(["mkdir", "-p", dir_path])
-        repository_ctx.execute(["ln", "-s", link_to, link_from])
+        mkdir_result = repository_ctx.execute(["mkdir", "-p", dir_path])
+        if mkdir_result.return_code != 0:
+            fail("Failed to create directory for symlink {}: {}".format(link_from, mkdir_result.stderr))
+
+        ln_result = repository_ctx.execute(["ln", "-s", link_to, link_from])
+        if ln_result.return_code != 0:
+            fail("Failed to create symlink {} -> {}: {}".format(link_from, link_to, ln_result.stderr))
 
     # Build the complete list of packages to extract, including all transitive dependencies
     # Use iterative approach with multiple passes to handle dependency chains
@@ -162,18 +196,39 @@ def _aptprep_sysroot_impl(repository_ctx):
         data_tar_file = data_tar_files[0]
 
         # Extract the data archive (this extracts to the sysroot root)
-        _extract_sysroot_package(repository_ctx, data_tar_file, tar_tool)
+        repository_ctx.extract(data_tar_file, watch_archive = "no")
 
         # List the files extracted
         extracted_files = _list_tar_files(repository_ctx, data_tar_file, tar_tool)
         manifest[pkg_name] = extracted_files
 
         # Clean up the extracted files
-        repository_ctx.execute(["rm", "-f", deb_filename])
-        repository_ctx.execute(["rm", "-rf", pkg_extract_dir])
+        # repository_ctx.execute(["rm", "-f", deb_filename])
+        # repository_ctx.execute(["rm", "-rf", pkg_extract_dir])
 
     # Fix symlinks in the sysroot
     _fix_sysroot_symlinks(repository_ctx)
+
+    # Add additional files to the sysroot
+    for dest_path, source_label in add_files.items():
+        source_file = repository_ctx.path(source_label)
+
+        # Create the destination directory if needed
+        dest_dir = dest_path.rsplit("/", 1)[0] if "/" in dest_path else "."
+        if dest_dir != ".":
+            mkdir_result = repository_ctx.execute(["mkdir", "-p", dest_dir])
+            if mkdir_result.return_code != 0:
+                fail("Failed to create directory for file {}: {}".format(dest_path, mkdir_result.stderr))
+
+        # Copy the file to the sysroot
+        cp_result = repository_ctx.execute(["cp", str(source_file), dest_path])
+        if cp_result.return_code != 0:
+            fail("Failed to copy file {} to {}: {}".format(source_file, dest_path, cp_result.stderr))
+
+        # Add to manifest
+        if "added_files" not in manifest:
+            manifest["added_files"] = []
+        manifest["added_files"].append(dest_path)
 
     # Create the install manifest
     repository_ctx.file(
@@ -182,10 +237,14 @@ def _aptprep_sysroot_impl(repository_ctx):
         executable = False,
     )
 
-    # Create a basic BUILD file using template
+    # Create the BUILD file - use provided build_file or default template
+    if not build_file:
+        build_file = Label("//aptprep/private:sysroot.BUILD.tpl")
     repository_ctx.template(
         "BUILD.bazel",
-        Label("//aptprep/private:sysroot.BUILD.tpl"),
+        build_file,
+        substitutions = {
+        },
     )
 
 aptprep_sysroot = repository_rule(
@@ -195,8 +254,8 @@ aptprep_sysroot = repository_rule(
         "packages_mapping": attr.string(mandatory = True, doc = "JSON mapping of package names to repository names"),
         "packages_data": attr.string(mandatory = True, doc = "JSON data of all packages from lockfile"),
         "architecture": attr.string(mandatory = True, doc = "Target architecture"),
-        "fix_rpath_with_patchelf": attr.bool(default = False, doc = "Whether to fix RPATH with patchelf (TODO)"),
-        "add_files": attr.string_keyed_label_dict(default = {}, doc = "Additional files to add to sysroot (TODO)"),
-        "extra_links": attr.string_dict(default = {}, doc = "Extra symlinks to create"),
+        "build_file": attr.label(doc = "Label of the BUILD file to use for this repository (optional)"),
+        "add_files": attr.string_keyed_label_dict(default = {}, doc = "Dictionary of additional files to add to sysroot. Keys are destination paths (relative to sysroot root), values are labels pointing to source files."),
+        "extra_links": attr.string_dict(default = {}, doc = "Dictionary of extra symlinks to create in the sysroot. Keys are symlink paths (relative to sysroot root), values are symlink targets."),
     },
 )

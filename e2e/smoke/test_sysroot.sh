@@ -47,6 +47,11 @@ BINARIES_TO_CHECK=(
     "usr/bin/curl"
 )
 
+# Check for files added via add_files
+ADDED_FILES_TO_CHECK=(
+    "etc/custom_config.txt"
+)
+
 # Check for basic libraries that should be in the sysroot
 # Just check if there are any .so files which would indicate libraries
 LIBRARIES_TO_CHECK=(
@@ -64,6 +69,19 @@ for binary in "${BINARIES_TO_CHECK[@]}"; do
         ((PASSED++))
     else
         echo "✗ Missing $binary"
+        ((FAILED++))
+    fi
+done
+
+# Check added files
+echo ""
+echo "Checking for files added via add_files..."
+for file in "${ADDED_FILES_TO_CHECK[@]}"; do
+    if [ -f "$SYSROOT_DIR/$file" ]; then
+        echo "✓ Found $file (added via add_files)"
+        ((PASSED++))
+    else
+        echo "✗ Missing $file (added via add_files)"
         ((FAILED++))
     fi
 done

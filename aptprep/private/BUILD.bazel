@@ -3,8 +3,6 @@ load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 # Export template files
 exports_files([
     "toolchain_toolchains.BUILD.tpl",
-    "package.BUILD.tpl",
-    "debian_package.BUILD.tpl",
     "sysroot.BUILD.tpl",
 ])
 

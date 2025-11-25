@@ -26,6 +26,6 @@ sh_test(
     srcs = ["test_sysroot.sh"],
     data = [
         # Reference the sysroot filegroup to ensure it's built
-        "@aptprep_smoke_sysroot//:sysroot",
+        "@aptprep_smoke_sysroot//:files",
     ],
 )

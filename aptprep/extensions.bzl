@@ -5,43 +5,13 @@ load("//aptprep/private:packages_repo.bzl", "aptprep_fake_repo", "aptprep_main_r
 load("//aptprep/private:sysroot_repo.bzl", "aptprep_sysroot")
 load(":repositories.bzl", "aptprep_register_toolchains")
 
-# Template for Debian package repository in extension
-_DEBIAN_PACKAGE_BUILD_TEMPLATE = """\"\"\"Debian package repository for {package_name}.\"\"\"
-
-filegroup(
-    name = "data",
-    srcs = glob(["data.tar.*"]),
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "control",
-    srcs = glob(["control.tar.*"]),
-    visibility = ["//visibility:public"],
-)
-"""
-
-# Template for Debian package repository in sysroot extension
-_DEBIAN_PACKAGE_SYSROOT_BUILD_TEMPLATE = """\"\"\"Debian package repository for sysroot {package_name}.\"\"\"
-
-filegroup(
-    name = "data",
-    srcs = glob(["data.tar.*"]),
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "control",
-    srcs = glob(["control.tar.*"]),
-    visibility = ["//visibility:public"],
-)
-"""
-
 # Define the tag class for packages lockfiles
 _packages_tag = tag_class(attrs = {
     "config": attr.label(doc = "Label of the aptprep config file (optional, used to auto-generate lockfile)"),
     "lockfile": attr.label(mandatory = True, doc = "Label of the aptprep lockfile"),
     "repo_name": attr.string(mandatory = True, doc = "Name for the generated repository"),
+    "dependency_blacklist": attr.string_list_dict(default = {}, doc = "Dictionary of per-package dependency blacklists. Keys are package names, values are lists of packages they should not depend on. Example: {'libgcc-s1': ['libc6']}"),
+    "package_build_file_template": attr.label(default = "@@rules_aptprep+//aptprep/private:debian_package_build.tpl", doc = "Custom BUILD file content template for packages (optional, uses default if not provided). Template should include {package_name} placeholder."),
 })
 
 # Define the tag class for sysroot lockfiles
@@ -51,6 +21,10 @@ _sysroot_tag = tag_class(attrs = {
     "repo_name": attr.string(mandatory = True, doc = "Name for the generated repository"),
     "packages_list": attr.string_list(default = [], doc = "List of packages to include in sysroot (empty = all)"),
     "architecture": attr.string(default = "amd64", doc = "Target architecture for the sysroot"),
+    "build_file": attr.label(doc = "Label of the BUILD file template to use for the sysroot repository"),
+    "extra_links": attr.string_dict(default = {}, doc = "Dictionary of extra symlinks to create in the sysroot. Keys are symlink paths (relative to sysroot root), values are symlink targets."),
+    "add_files": attr.string_keyed_label_dict(default = {}, doc = "Dictionary of additional files to add to sysroot. Keys are destination paths (relative to sysroot root), values are labels pointing to source files."),
+    "package_build_file_template": attr.label(default = "@@rules_aptprep+//aptprep/private:debian_package_build.tpl", doc = "Custom BUILD file content template for packages (optional, uses default if not provided). Template should include {package_name} placeholder."),
 })
 
 # Define the tag class for aptprep toolchain
@@ -94,6 +68,8 @@ def _aptprep_extension_impl(module_ctx):
         for tag in module.tags.packages:
             lockfile_label = tag.lockfile
             repo_name = tag.repo_name
+            dependency_blacklist = tag.dependency_blacklist
+            package_build_file_template = module_ctx.read(tag.package_build_file_template)
 
             # Read the lockfile
             lockfile_path = module_ctx.path(lockfile_label)
@@ -128,7 +104,7 @@ def _aptprep_extension_impl(module_ctx):
                     name = pkg_repo_name,
                     url = download_url,
                     sha256 = digest_info.get("value", "") if digest_info.get("algorithm") == "SHA256" else "",
-                    build_file_content = _DEBIAN_PACKAGE_BUILD_TEMPLATE.format(package_name = package_name),
+                    build_file_content = package_build_file_template.format(package_name = package_name),
                 )
 
             # Create main repository that provides the structured interface
@@ -136,6 +112,7 @@ def _aptprep_extension_impl(module_ctx):
                 name = repo_name,
                 repo_name = repo_name,
                 packages_data = json.encode(packages),
+                dependency_blacklist = dependency_blacklist,
             )
 
     # Process all sysroot tags from all modules
@@ -145,6 +122,10 @@ def _aptprep_extension_impl(module_ctx):
             repo_name = tag.repo_name
             packages_list = tag.packages_list
             architecture = tag.architecture
+            build_file = getattr(tag, "build_file", None)
+            extra_links = tag.extra_links
+            add_files = tag.add_files
+            package_build_file_template = module_ctx.read(tag.package_build_file_template)
 
             # Read the lockfile
             lockfile_path = module_ctx.path(lockfile_label)
@@ -179,7 +160,7 @@ def _aptprep_extension_impl(module_ctx):
                     name = pkg_repo_name,
                     url = download_url,
                     sha256 = digest_info.get("value", "") if digest_info.get("algorithm") == "SHA256" else "",
-                    build_file_content = _DEBIAN_PACKAGE_SYSROOT_BUILD_TEMPLATE.format(package_name = package_name),
+                    build_file_content = package_build_file_template.format(package_name = package_name),
                 )
 
             # Generate the packages mapping with sysroot-prefixed repository names
@@ -197,13 +178,18 @@ def _aptprep_extension_impl(module_ctx):
                         packages_list.append(pkg_name)
 
             # Create the sysroot repository
-            aptprep_sysroot(
-                name = repo_name,
-                packages_list = packages_list,
-                packages_mapping = mapping_data,
-                packages_data = json.encode(packages),
-                architecture = architecture,
-            )
+            kwargs = {
+                "name": repo_name,
+                "packages_list": packages_list,
+                "packages_mapping": mapping_data,
+                "packages_data": json.encode(packages),
+                "architecture": architecture,
+                "extra_links": extra_links,
+                "add_files": add_files,
+            }
+            if build_file:
+                kwargs["build_file"] = build_file
+            aptprep_sysroot(**kwargs)
 
 # Define the module extension
 aptprep = module_extension(

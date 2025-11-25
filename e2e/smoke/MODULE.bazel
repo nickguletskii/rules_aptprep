@@ -17,6 +17,9 @@ aptprep.packages(
     repo_name = "aptprep_smoke_packages",
 )
 aptprep.sysroot(
+    add_files = {
+        "etc/custom_config.txt": "//:custom_config.txt",
+    },
     config = "//:aptprep.yaml",
     lockfile = "//:lockfile.json",
     packages_list = [
