@@ -18,6 +18,10 @@
 
 """Utilities for patching ELF binaries in sysroots with correct RPATH and interpreter."""
 
+_DYNAMIC_LINKER_ARCH_BY_DEBIAN_ARCH = {
+    "amd64": "x86-64",
+}
+
 def _list_files(rctx, busybox, directory = ".", *args):
     if not rctx.path(directory).exists:
         return []
@@ -76,12 +80,13 @@ def _fixup_interpreter(rctx, patchelf, path, interpreter):
         ))
 
 def _find_interpreter(rctx, busybox, arch):
+    linker_arch = _DYNAMIC_LINKER_ARCH_BY_DEBIAN_ARCH.get(arch, arch).replace("_", "-")
     candidates = _list_files(
         rctx,
         busybox,
         "lib64/",
         "-name",
-        "ld-linux-{}.so*".format(arch.replace("_", "-")),
+        "ld-linux-{}.so*".format(linker_arch),
     )
     for path in sorted(candidates, reverse = True):
         return str(rctx.path(path).realpath)
@@ -125,7 +130,7 @@ def _should_patch_binary(rctx, busybox, path):
         return False
     return True
 
-def patch_binaries(rctx, busybox, patchelf, arch):
+def patch_binaries(rctx, busybox, patchelf, arch, patchelf_dirs = None):
     """Patches ELF binaries in the sysroot with correct RPATH and interpreter.
 
     Args:
@@ -133,6 +138,7 @@ def patch_binaries(rctx, busybox, patchelf, arch):
         busybox: Path to busybox binary
         patchelf: Path to patchelf binary
         arch: Target architecture
+        patchelf_dirs: List of directories to scan for binaries/libraries to patch.
     """
     if not busybox:
         fail("busybox is required when patch_binaries is enabled")
@@ -155,8 +161,11 @@ def patch_binaries(rctx, busybox, patchelf, arch):
         seen.add(interpreter.removeprefix(pwd))
         interpreter_path = interpreter
 
-    for directory in rctx.attr.patchelf_dirs:
-        for path in _list_files(rctx, busybox, directory.format(arch = arch), "-maxdepth", "1"):
+    if patchelf_dirs == None:
+        patchelf_dirs = rctx.attr.patchelf_dirs
+
+    for directory in patchelf_dirs:
+        for path in _list_files(rctx, busybox, directory, "-maxdepth", "1"):
             realpath = str(rctx.path(path).realpath).removeprefix(pwd)
             if realpath not in seen and not any([realpath.endswith(e) for e in (".o", ".a")]) and _should_patch_binary(rctx, busybox, realpath):
                 _fixup_rpath(rctx, patchelf, realpath, lib_paths)

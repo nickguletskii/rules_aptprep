@@ -39,4 +39,14 @@ bazel_dep(name = "gazelle", version = "0.45.0", repo_name = "bazel_gazelle")
 bazel_dep(name = "bazel_skylib_gazelle_plugin", version = "1.4.1", dev_dependency = True)
 bazel_dep(name = "buildifier_prebuilt", version = "6.1.2", dev_dependency = True)
 
-aptprep = use_extension("//aptprep:extensions.bzl", "aptprep")
+# Test-only fixture extension for //aptprep/tests:patching_behavior_test.
+# This creates a synthetic sysroot repository that runs `patch_binaries` at
+# repository fetch time and exports observed patch/runtime results.
+# Keep this as `dev_dependency = True` so it is not part of downstream usage.
+patching_fixture = use_extension(
+    "//aptprep/tests:patching_fixture_ext.bzl",
+    "patching_fixture",
+    dev_dependency = True,
+)
+patching_fixture.fixture(name = "aptprep_patching_fixture")
+use_repo(patching_fixture, "aptprep_patching_fixture")

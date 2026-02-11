@@ -2,6 +2,74 @@
 
 load("//aptprep/private:rpath.bzl", "patch_binaries")
 
+_GNU_CPU_ARCH_BY_DEBIAN_ARCH = {
+    "amd64": "x86_64",
+    "arm64": "aarch64",
+    "armhf": "arm",
+    "i386": "i386",
+    "ppc64el": "powerpc64le",
+    "s390x": "s390x",
+}
+
+_MULTIARCH_DIR_BY_DEBIAN_ARCH = {
+    "amd64": "x86_64-linux-gnu",
+    "arm64": "aarch64-linux-gnu",
+    "armhf": "arm-linux-gnueabihf",
+    "i386": "i386-linux-gnu",
+    "ppc64el": "powerpc64le-linux-gnu",
+    "s390x": "s390x-linux-gnu",
+}
+
+_LIB_DIR_BY_DEBIAN_ARCH = {
+    "amd64": "lib64",
+    "arm64": "lib",
+    "armhf": "lib",
+    "i386": "lib",
+    "ppc64el": "lib64",
+    "s390x": "lib64",
+}
+
+DEFAULT_PATCHELF_DIRS = [
+    "usr/bin/",
+    "bin/",
+    "usr/sbin/",
+    "sbin/",
+    "usr/lib/{x86_64-linux-gnu}/",
+    "lib/{x86_64-linux-gnu}/",
+    "usr/lib/{x86_64}/",
+    "lib/{x86_64}/",
+    "usr/lib/{amd64}/",
+    "lib/{amd64}/",
+    "usr/{lib64}/",
+    "{lib64}/",
+    "usr/lib/",
+    "lib/",
+]
+
+def _patchelf_dir_substitutions(arch):
+    return {
+        # Backward-compatible placeholder.
+        "arch": arch,
+
+        # Named placeholder variants based on amd64 conventions.
+        "lib64": _LIB_DIR_BY_DEBIAN_ARCH.get(arch, "lib"),
+        "amd64": arch,
+        "x86_64": _GNU_CPU_ARCH_BY_DEBIAN_ARCH.get(arch, arch),
+        "x86_64-linux-gnu": _MULTIARCH_DIR_BY_DEBIAN_ARCH.get(arch, arch),
+    }
+
+def _expand_patchelf_dir_template(path_template, substitutions):
+    result = path_template
+    for key, value in substitutions.items():
+        result = result.replace("{" + key + "}", value)
+    return result
+
+def patchelf_dir_substitutions(arch):
+    return _patchelf_dir_substitutions(arch)
+
+def expand_patchelf_dir_template(path_template, substitutions):
+    return _expand_patchelf_dir_template(path_template, substitutions)
+
 def _list_tar_files(rctx, tar_path, tar_tool):
     """List files in a tar archive."""
     cmd = [tar_tool, "-tf", str(tar_path)]
@@ -258,11 +326,17 @@ def _aptprep_sysroot_impl(repository_ctx):
         },
     )
     if patch_binaries_enabled:
+        patchelf_dirs = []
+        substitutions = _patchelf_dir_substitutions(architecture)
+        for path_template in repository_ctx.attr.patchelf_dirs:
+            patchelf_dirs.append(_expand_patchelf_dir_template(path_template, substitutions))
+
         patch_binaries(
             repository_ctx,
             repository_ctx.which("busybox"),
             repository_ctx.which("patchelf"),
             architecture,
+            patchelf_dirs = patchelf_dirs,
         )
 
 aptprep_sysroot = repository_rule(
@@ -274,19 +348,8 @@ aptprep_sysroot = repository_rule(
         "architecture": attr.string(mandatory = True, doc = "Target architecture"),
         "build_file": attr.label(doc = "Label of the BUILD file to use for this repository (optional)"),
         "patchelf_dirs": attr.string_list(
-            default = [
-                "usr/bin/",
-                "bin/",
-                "usr/sbin/",
-                "sbin/",
-                "usr/lib/{arch}/",
-                "lib/{arch}/",
-                "usr/lib64/",
-                "lib64/",
-                "usr/lib/",
-                "lib/",
-            ],
-            doc = "List of directories (with {arch} placeholder) to fix rpaths and interpreters in.",
+            default = DEFAULT_PATCHELF_DIRS,
+            doc = "List of directories to patch. Supports placeholders: {arch}, {lib64}, {amd64}, {x86_64}, {x86_64-linux-gnu}.",
         ),
         "patch_binaries": attr.bool(default = True, doc = "Whether to run binary patching (rpath/interpreter fixups) on extracted files."),
         "patch_binaries_whitelist_regex": attr.string_list(default = [], doc = "Optional list of regex patterns. If non-empty, only files whose paths match at least one pattern are patched."),
