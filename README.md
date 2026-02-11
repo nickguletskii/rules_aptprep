@@ -89,6 +89,15 @@ aptprep.sysroot(
     packages_list = ["bash", "curl"],  # Root packages to include
     architecture = "amd64",  # Target architecture
     config = "//:aptprep.yaml",
+    patch_binaries = True,  # Optional, default True
+    patch_binaries_whitelist_regex = [  # Optional, default []
+        "^usr/bin/.*$",
+        "^lib/x86_64-linux-gnu/.*\\.so(\\..*)?$",
+    ],
+    patch_binaries_blacklist_regex = [  # Optional, default []
+        "^usr/bin/python3(\\..*)?$",
+    ],
+)
 ```
 
 This creates a repository `@my_sysroot` containing:
@@ -96,6 +105,7 @@ This creates a repository `@my_sysroot` containing:
 - All requested packages and their transitive dependencies
 - Complete directory structure as if installed by dpkg
 - Fixed symlinks (no absolute paths)
+- Optional binary rpath patching controls (`patch_binaries`, whitelist/blacklist regex filters)
 - Install manifest documenting what was extracted
 
 ## Development

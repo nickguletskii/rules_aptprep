@@ -1,5 +1,7 @@
 """Sysroot repository rule and tar utilities for aptprep extension."""
 
+load("//aptprep/private:rpath.bzl", "patch_binaries")
+
 def _list_tar_files(rctx, tar_path, tar_tool):
     """List files in a tar archive."""
     cmd = [tar_tool, "-tf", str(tar_path)]
@@ -92,9 +94,18 @@ def _aptprep_sysroot_impl(repository_ctx):
     architecture = repository_ctx.attr.architecture
     extra_links = repository_ctx.attr.extra_links
     add_files = repository_ctx.attr.add_files
+    patch_binaries_enabled = repository_ctx.attr.patch_binaries
     build_file = repository_ctx.attr.build_file
 
     tar_tool = repository_ctx.which("tar")
+
+    # Watch the build file template for changes
+    if build_file:
+        repository_ctx.watch(build_file)
+
+    # Watch all additional files for changes
+    for dest_path, source_label in add_files.items():
+        repository_ctx.watch(source_label)
 
     # Parse the packages mapping and package data from JSON
     packages_mapping = json.decode(packages_mapping_json)
@@ -246,6 +257,13 @@ def _aptprep_sysroot_impl(repository_ctx):
         substitutions = {
         },
     )
+    if patch_binaries_enabled:
+        patch_binaries(
+            repository_ctx,
+            repository_ctx.which("busybox"),
+            repository_ctx.which("patchelf"),
+            architecture,
+        )
 
 aptprep_sysroot = repository_rule(
     implementation = _aptprep_sysroot_impl,
@@ -255,6 +273,24 @@ aptprep_sysroot = repository_rule(
         "packages_data": attr.string(mandatory = True, doc = "JSON data of all packages from lockfile"),
         "architecture": attr.string(mandatory = True, doc = "Target architecture"),
         "build_file": attr.label(doc = "Label of the BUILD file to use for this repository (optional)"),
+        "patchelf_dirs": attr.string_list(
+            default = [
+                "usr/bin/",
+                "bin/",
+                "usr/sbin/",
+                "sbin/",
+                "usr/lib/{arch}/",
+                "lib/{arch}/",
+                "usr/lib64/",
+                "lib64/",
+                "usr/lib/",
+                "lib/",
+            ],
+            doc = "List of directories (with {arch} placeholder) to fix rpaths and interpreters in.",
+        ),
+        "patch_binaries": attr.bool(default = True, doc = "Whether to run binary patching (rpath/interpreter fixups) on extracted files."),
+        "patch_binaries_whitelist_regex": attr.string_list(default = [], doc = "Optional list of regex patterns. If non-empty, only files whose paths match at least one pattern are patched."),
+        "patch_binaries_blacklist_regex": attr.string_list(default = [], doc = "Optional list of regex patterns. Files whose paths match any pattern are skipped, even if whitelisted."),
         "add_files": attr.string_keyed_label_dict(default = {}, doc = "Dictionary of additional files to add to sysroot. Keys are destination paths (relative to sysroot root), values are labels pointing to source files."),
         "extra_links": attr.string_dict(default = {}, doc = "Dictionary of extra symlinks to create in the sysroot. Keys are symlink paths (relative to sysroot root), values are symlink targets."),
     },

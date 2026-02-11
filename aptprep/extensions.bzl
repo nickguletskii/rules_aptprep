@@ -1,6 +1,7 @@
 """Module extension for aptprep lockfile integration and toolchain support."""
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("//aptprep/private:deb_file_repo.bzl", "deb_file_repo")
 load("//aptprep/private:packages_repo.bzl", "aptprep_fake_repo", "aptprep_main_repo", "generate_packages_mapping_with_prefix")
 load("//aptprep/private:sysroot_repo.bzl", "aptprep_sysroot")
 load(":repositories.bzl", "aptprep_register_toolchains")
@@ -24,6 +25,9 @@ _sysroot_tag = tag_class(attrs = {
     "build_file": attr.label(doc = "Label of the BUILD file template to use for the sysroot repository"),
     "extra_links": attr.string_dict(default = {}, doc = "Dictionary of extra symlinks to create in the sysroot. Keys are symlink paths (relative to sysroot root), values are symlink targets."),
     "add_files": attr.string_keyed_label_dict(default = {}, doc = "Dictionary of additional files to add to sysroot. Keys are destination paths (relative to sysroot root), values are labels pointing to source files."),
+    "patch_binaries": attr.bool(default = True, doc = "Whether to patch binaries in the extracted sysroot (rpath/interpreter fixups)."),
+    "patch_binaries_whitelist_regex": attr.string_list(default = [], doc = "Optional list of regex patterns. If non-empty, only files matching at least one pattern are patched."),
+    "patch_binaries_blacklist_regex": attr.string_list(default = [], doc = "Optional list of regex patterns. Files matching any pattern are skipped."),
     "package_build_file_template": attr.label(default = "@@rules_aptprep+//aptprep/private:debian_package_build.tpl", doc = "Custom BUILD file content template for packages (optional, uses default if not provided). Template should include {package_name} placeholder."),
 })
 
@@ -69,7 +73,6 @@ def _aptprep_extension_impl(module_ctx):
             lockfile_label = tag.lockfile
             repo_name = tag.repo_name
             dependency_blacklist = tag.dependency_blacklist
-            package_build_file_template = module_ctx.read(tag.package_build_file_template)
 
             # Read the lockfile
             lockfile_path = module_ctx.path(lockfile_label)
@@ -93,26 +96,35 @@ def _aptprep_extension_impl(module_ctx):
             # Create individual repositories for each package
             for package_key, package_info in packages.items():
                 package_name = package_info["name"]
+                package_version = package_info["version"]
+                package_arch = package_info["architecture"]
                 download_url = package_info["download_url"]
                 digest_info = package_info.get("digest", {})
 
                 # Create individual repository for this package
                 pkg_repo_name = "{}__{}".format(repo_name, package_key)
 
-                # Create http_archive for this package
-                http_archive(
+                # Download .deb file without extracting using custom repository rule
+                # Sanitize version to remove colons (invalid in Bazel target names)
+                sanitized_version = package_version.replace(":", "_")
+                deb_filename = "{}_{}_{}.deb".format(package_name, sanitized_version, package_arch)
+
+                deb_file_repo(
                     name = pkg_repo_name,
                     url = download_url,
                     sha256 = digest_info.get("value", "") if digest_info.get("algorithm") == "SHA256" else "",
-                    build_file_content = package_build_file_template.format(package_name = package_name),
+                    filename = deb_filename,
                 )
 
             # Create main repository that provides the structured interface
+            config_label = getattr(tag, "config", None)
             aptprep_main_repo(
                 name = repo_name,
                 repo_name = repo_name,
                 packages_data = json.encode(packages),
                 dependency_blacklist = dependency_blacklist,
+                lockfile = lockfile_label,
+                config = config_label,
             )
 
     # Process all sysroot tags from all modules
@@ -125,6 +137,9 @@ def _aptprep_extension_impl(module_ctx):
             build_file = getattr(tag, "build_file", None)
             extra_links = tag.extra_links
             add_files = tag.add_files
+            patch_binaries = tag.patch_binaries
+            patch_binaries_whitelist_regex = tag.patch_binaries_whitelist_regex
+            patch_binaries_blacklist_regex = tag.patch_binaries_blacklist_regex
             package_build_file_template = module_ctx.read(tag.package_build_file_template)
 
             # Read the lockfile
@@ -186,6 +201,9 @@ def _aptprep_extension_impl(module_ctx):
                 "architecture": architecture,
                 "extra_links": extra_links,
                 "add_files": add_files,
+                "patch_binaries": patch_binaries,
+                "patch_binaries_whitelist_regex": patch_binaries_whitelist_regex,
+                "patch_binaries_blacklist_regex": patch_binaries_blacklist_regex,
             }
             if build_file:
                 kwargs["build_file"] = build_file
