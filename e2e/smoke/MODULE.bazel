@@ -1,5 +1,6 @@
 bazel_dep(name = "rules_aptprep", version = "0.0.0", dev_dependency = True)
 bazel_dep(name = "bazel_skylib", version = "1.7.1", dev_dependency = True)
+bazel_dep(name = "rules_shell", version = "0.6.1", dev_dependency = True)
 
 local_path_override(
     module_name = "rules_aptprep",
@@ -11,17 +12,20 @@ aptprep.toolchain(
     archive_url = "https://github.com/nickguletskii/aptprep/releases/download/v0.1.2/aptprep_linux_x86_64.tar",
     sha256 = "4d1b992540fb9856561f101d8ef4a54b7e74529a65171468f7940933ad0a0e52",
 )
-aptprep.packages(
+aptprep.lockfile(
     config = "//:aptprep.yaml",
     lockfile = "//:lockfile.json",
+    lockfile_name = "smoke",
+)
+aptprep.packages(
+    lockfile_name = "smoke",
     repo_name = "aptprep_smoke_packages",
 )
 aptprep.sysroot(
     add_files = {
         "etc/custom_config.txt": "//:custom_config.txt",
     },
-    config = "//:aptprep.yaml",
-    lockfile = "//:lockfile.json",
+    lockfile_name = "smoke",
     packages_list = [
         "bash",
         "curl",

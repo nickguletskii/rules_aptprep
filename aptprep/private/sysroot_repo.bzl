@@ -70,6 +70,18 @@ def patchelf_dir_substitutions(arch):
 def expand_patchelf_dir_template(path_template, substitutions):
     return _expand_patchelf_dir_template(path_template, substitutions)
 
+def _dirname(path):
+    parts = path.rsplit("/", 1)
+    if len(parts) == 2:
+        return parts[0]
+    return "."
+
+def _find_package_key(packages_data, package_name, architecture):
+    for package_key, package_info in packages_data.items():
+        if package_info["name"] == package_name and package_info["architecture"] == architecture:
+            return package_key
+    return None
+
 def _list_tar_files(rctx, tar_path, tar_tool):
     """List files in a tar archive."""
     cmd = [tar_tool, "-tf", str(tar_path)]
@@ -157,8 +169,8 @@ def _fix_sysroot_symlinks(rctx):
 def _aptprep_sysroot_impl(repository_ctx):
     """Implementation for aptprep_sysroot repository rule."""
     packages_list = repository_ctx.attr.packages_list
-    packages_mapping_json = repository_ctx.attr.packages_mapping
     packages_data_json = repository_ctx.attr.packages_data
+    package_data_archive_metadata = repository_ctx.attr.package_data_archives
     architecture = repository_ctx.attr.architecture
     extra_links = repository_ctx.attr.extra_links
     add_files = repository_ctx.attr.add_files
@@ -166,6 +178,8 @@ def _aptprep_sysroot_impl(repository_ctx):
     build_file = repository_ctx.attr.build_file
 
     tar_tool = repository_ctx.which("tar")
+    if not tar_tool:
+        fail("Could not find `tar` in PATH; it is required to extract package data archives")
 
     # Watch the build file template for changes
     if build_file:
@@ -175,8 +189,7 @@ def _aptprep_sysroot_impl(repository_ctx):
     for dest_path, source_label in add_files.items():
         repository_ctx.watch(source_label)
 
-    # Parse the packages mapping and package data from JSON
-    packages_mapping = json.decode(packages_mapping_json)
+    # Parse package data from JSON.
     packages_data = json.decode(packages_data_json)
 
     # Create sysroot directory structure
@@ -206,16 +219,7 @@ def _aptprep_sysroot_impl(repository_ctx):
             if pkg_name in packages_to_extract:
                 continue  # Already processed
 
-            if pkg_name not in packages_mapping:
-                fail("Package {} not found in packages_mapping".format(pkg_name))
-
-            # Find the package key for this package name
-            package_key = None
-            for key, info in packages_data.items():
-                if info["name"] == pkg_name and info["architecture"] == architecture:
-                    package_key = key
-                    break
-
+            package_key = _find_package_key(packages_data, pkg_name, architecture)
             if not package_key:
                 fail("Could not find package {} for architecture {}".format(pkg_name, architecture))
 
@@ -233,57 +237,31 @@ def _aptprep_sysroot_impl(repository_ctx):
         if not packages_to_process:
             break  # No more dependencies to process
 
-    # Extract all packages
+    # Extract all package data archives from shared deb_file_repo repositories.
     manifest = {}
     for pkg_name, package_key in packages_to_extract.items():
-        package_info = packages_data[package_key]
-        download_url = package_info["download_url"]
-        digest_info = package_info.get("digest", {})
+        if package_key not in package_data_archive_metadata:
+            fail("No package data archive metadata label defined for package key '{}'".format(package_key))
+        metadata_path = repository_ctx.path(package_data_archive_metadata[package_key])
+        if not metadata_path.exists:
+            fail("Package data archive metadata '{}' is missing for package key '{}'".format(metadata_path, package_key))
+        data_archive_filename = repository_ctx.read(metadata_path).strip()
+        if not data_archive_filename:
+            fail("Package data archive metadata '{}' is empty for package key '{}'".format(metadata_path, package_key))
 
-        # Download the package
-        sha256 = digest_info.get("value", "") if digest_info.get("algorithm") == "SHA256" else ""
-        deb_filename = "package_{}.deb".format(pkg_name.replace("/", "_"))
+        data_archive_path = repository_ctx.path("{}/{}".format(
+            _dirname(str(metadata_path)),
+            data_archive_filename,
+        ))
+        if not data_archive_path.exists:
+            fail("Package data archive '{}' is missing for package key '{}'".format(data_archive_path, package_key))
 
-        repository_ctx.download(
-            url = download_url,
-            output = deb_filename,
-            sha256 = sha256 if sha256 else None,
-        )
+        extract_result = repository_ctx.execute([str(tar_tool), "-xf", str(data_archive_path), "-C", "."])
+        if extract_result.return_code != 0:
+            fail("Failed to extract package data archive for {}: {}".format(package_key, extract_result.stderr))
 
-        # Create a temporary directory for extraction
-        pkg_extract_dir = "pkg_{}".format(pkg_name.replace("/", "_"))
-        repository_ctx.execute(["mkdir", "-p", pkg_extract_dir])
-
-        # Extract the downloaded package - it's a .deb file
-        # First, extract the deb file to get the data.tar.*
-        deb_extract_result = repository_ctx.execute(
-            ["ar", "x", "../{}".format(deb_filename)],
-            working_directory = pkg_extract_dir,
-        )
-        if deb_extract_result.return_code != 0:
-            fail("Failed to extract deb file {}: {}".format(deb_filename, deb_extract_result.stderr))
-
-        # Find the data.tar.* file
-        find_result = repository_ctx.execute(["find", pkg_extract_dir, "-name", "data.tar*", "-type", "f"])
-        if find_result.return_code != 0:
-            fail("Could not find data.tar* file in extracted deb")
-
-        data_tar_files = find_result.stdout.strip().split("\n")
-        if not data_tar_files or not data_tar_files[0]:
-            fail("No data.tar* file found in extracted deb")
-
-        data_tar_file = data_tar_files[0]
-
-        # Extract the data archive (this extracts to the sysroot root)
-        repository_ctx.extract(data_tar_file, watch_archive = "no")
-
-        # List the files extracted
-        extracted_files = _list_tar_files(repository_ctx, data_tar_file, tar_tool)
+        extracted_files = _list_tar_files(repository_ctx, data_archive_path, str(tar_tool))
         manifest[pkg_name] = extracted_files
-
-        # Clean up the extracted files
-        # repository_ctx.execute(["rm", "-f", deb_filename])
-        # repository_ctx.execute(["rm", "-rf", pkg_extract_dir])
 
     # Fix symlinks in the sysroot
     _fix_sysroot_symlinks(repository_ctx)
@@ -343,8 +321,8 @@ aptprep_sysroot = repository_rule(
     implementation = _aptprep_sysroot_impl,
     attrs = {
         "packages_list": attr.string_list(mandatory = True, doc = "List of package names to include in sysroot"),
-        "packages_mapping": attr.string(mandatory = True, doc = "JSON mapping of package names to repository names"),
         "packages_data": attr.string(mandatory = True, doc = "JSON data of all packages from lockfile"),
+        "package_data_archives": attr.string_keyed_label_dict(mandatory = True, doc = "Mapping from lockfile package keys to @repo//:data_archive_filename.txt labels."),
         "architecture": attr.string(mandatory = True, doc = "Target architecture"),
         "build_file": attr.label(doc = "Label of the BUILD file to use for this repository (optional)"),
         "patchelf_dirs": attr.string_list(

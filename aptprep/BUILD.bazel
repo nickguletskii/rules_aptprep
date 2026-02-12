@@ -49,6 +49,7 @@ bzl_library(
     visibility = ["//visibility:public"],
     deps = [
         ":repositories",
+        "//aptprep/private:deb_file_repo",
         "//aptprep/private:packages_repo",
         "//aptprep/private:sysroot_repo",
     ],

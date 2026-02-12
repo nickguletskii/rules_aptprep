@@ -4,6 +4,7 @@ Add a basic smoke-test target below.
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@rules_aptprep//aptprep:rules.bzl", "aptprep_lockfile")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 # Generate lockfile from aptprep config using the aptprep binary
 aptprep_lockfile(
@@ -14,7 +15,7 @@ aptprep_lockfile(
 build_test(
     name = "smoke_test_packages",
     targets = [
-        "@aptprep_smoke_packages//:foo",
+        "@aptprep_smoke_packages//:all_debs",
     ],
 )
 

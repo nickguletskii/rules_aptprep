@@ -2,6 +2,7 @@ load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 
 # Export template files
 exports_files([
+    "deb_package.BUILD.tpl",
     "toolchain_toolchains.BUILD.tpl",
     "sysroot.BUILD.tpl",
 ])
@@ -29,6 +30,12 @@ bzl_library(
     srcs = ["packages_repo.bzl"],
     visibility = ["//aptprep:__subpackages__"],
     deps = ["@bazel_tools//tools/build_defs/repo:http.bzl"],
+)
+
+bzl_library(
+    name = "deb_file_repo",
+    srcs = ["deb_file_repo.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
 )
 
 bzl_library(

@@ -14,11 +14,12 @@ filegroup(
 {packages_file_rule}
 """
 
-def _generate_package_substitutions(repo_name, package_info, dependencies_info, dependency_blacklist = {}):
+def _generate_package_substitutions(main_repo_name, package_repo_prefix, package_info, dependencies_info, dependency_blacklist = {}):
     """Generate template substitutions for a package BUILD file (per architecture).
 
     Args:
-        repo_name: Name of the main repository
+        main_repo_name: Name of the main repository
+        package_repo_prefix: Prefix of per-package repositories created from lockfile.
         package_info: Dict with package information from lockfile
         dependencies_info: Dict mapping dependency keys to their package info
         dependency_blacklist: Dict mapping package names to lists of packages they should not depend on
@@ -44,7 +45,7 @@ def _generate_package_substitutions(repo_name, package_info, dependencies_info, 
             if dep_name in blacklisted_deps:
                 continue
             dep_arch = dep_info["architecture"]
-            dep_refs.append('\"@{}//{}/{}\"'.format(repo_name, dep_name, dep_arch))
+            dep_refs.append('\"@{}//{}/{}\"'.format(main_repo_name, dep_name, dep_arch))
 
     deps_str = " + [\n        " + ",\n        ".join(dep_refs) + ",\n    ]" if dep_refs else ""
 
@@ -60,7 +61,7 @@ def _generate_package_substitutions(repo_name, package_info, dependencies_info, 
         fail("Could not find package key for {}:{}".format(package_name, architecture))
 
     return {
-        "{REPO_NAME}": repo_name,
+        "{PACKAGE_REPO_PREFIX}": package_repo_prefix,
         "{PACKAGE_KEY}": package_key,
         "{PACKAGE_NAME}": package_name,
         "{DEPS}": deps_str,
@@ -97,7 +98,7 @@ def _generate_root_build_file(repo_name, packages, lockfile_label = None, config
             config_attr = '\n    config = "{}",'.format(config_label)
 
         packages_file_rule = '''generate_packages_file(
-    name = "Packages",
+    name = "generate_packages_index",
     lockfile = "{}",{}
     out = "Packages",
     visibility = ["//visibility:public"],
@@ -109,7 +110,7 @@ def _generate_root_build_file(repo_name, packages, lockfile_label = None, config
         packages_file_rule = packages_file_rule,
     )
 
-def _generate_packages_mapping(packages_dict, repo_name):
+def _generate_packages_mapping(packages_dict, package_repo_prefix):
     """Generate a JSON file that maps package names to repository names.
 
     For packages with multiple versions/architectures, use the package key
@@ -117,24 +118,12 @@ def _generate_packages_mapping(packages_dict, repo_name):
 
     Args:
         packages_dict: Dict of all packages from lockfile
-        repo_name: Base name of the repository
+        package_repo_prefix: Prefix of per-package repositories
 
     Returns:
         String content for the packages_mapping.json file
     """
-    return json.encode_indent(_build_packages_mapping(packages_dict, repo_name))
-
-def generate_packages_mapping_with_prefix(packages_dict, repo_prefix):
-    """Generate a packages mapping dict with a custom repository prefix.
-
-    Args:
-        packages_dict: Dict of all packages from lockfile
-        repo_prefix: Prefix for repository names
-
-    Returns:
-        JSON string of the packages mapping
-    """
-    return json.encode_indent(_build_packages_mapping(packages_dict, repo_prefix))
+    return json.encode_indent(_build_packages_mapping(packages_dict, package_repo_prefix))
 
 def _build_packages_mapping(packages_dict, repo_prefix):
     """Build the packages mapping dictionary.
@@ -180,6 +169,7 @@ def _build_packages_mapping(packages_dict, repo_prefix):
 def _aptprep_main_repo_impl(repository_ctx):
     """Implementation for main aptprep repository."""
     repo_name = repository_ctx.attr.repo_name
+    package_repo_prefix = repository_ctx.attr.package_repo_prefix
     packages_data = repository_ctx.attr.packages_data
     dependency_blacklist = repository_ctx.attr.dependency_blacklist
     lockfile_label = repository_ctx.attr.lockfile
@@ -195,7 +185,7 @@ def _aptprep_main_repo_impl(repository_ctx):
     )
 
     # Generate and write the packages mapping file
-    mapping_content = _generate_packages_mapping(packages, repo_name)
+    mapping_content = _generate_packages_mapping(packages, package_repo_prefix)
     repository_ctx.file("packages_mapping.json", mapping_content)
 
     # Generate packages.bzl with PACKAGES dict for use in BUILD files
@@ -209,6 +199,7 @@ def _aptprep_main_repo_impl(repository_ctx):
 
         substitutions = _generate_package_substitutions(
             repo_name,
+            package_repo_prefix,
             package_info,
             packages,  # Pass all packages for dependency resolution
             dependency_blacklist,  # Pass the blacklist
@@ -225,6 +216,7 @@ aptprep_main_repo = repository_rule(
     implementation = _aptprep_main_repo_impl,
     attrs = {
         "repo_name": attr.string(mandatory = True),
+        "package_repo_prefix": attr.string(mandatory = True, doc = "Prefix of package repositories created from the referenced lockfile."),
         "packages_data": attr.string(mandatory = True),
         "dependency_blacklist": attr.string_list_dict(default = {}, doc = "Dictionary of per-package dependency blacklists. Keys are package names, values are lists of packages they should not depend on."),
         "lockfile": attr.label(mandatory = False, doc = "Label of the lockfile (for generating Packages file)"),
