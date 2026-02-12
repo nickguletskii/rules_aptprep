@@ -96,13 +96,11 @@ def _deb_file_repo_impl(repository_ctx):
     filename = repository_ctx.attr.filename
 
     # Download the .deb file.
-    kwargs = {
-        "url": url,
-        "output": filename,
-    }
-    if sha256:
-        kwargs["sha256"] = sha256
-    repository_ctx.download(**kwargs)
+    repository_ctx.download(
+        url = url,
+        output = filename,
+        sha256 = sha256,
+    )
 
     # .deb is an ar archive. Extract it with `ar` into a temp directory.
     deb_contents_dir = "deb_contents"
@@ -170,7 +168,7 @@ deb_file_repo = repository_rule(
     implementation = _deb_file_repo_impl,
     attrs = {
         "url": attr.string(mandatory = True, doc = "URL of the .deb file"),
-        "sha256": attr.string(doc = "SHA256 checksum of the file"),
+        "sha256": attr.string(mandatory = True, doc = "SHA256 checksum of the file"),
         "filename": attr.string(mandatory = True, doc = "Name for the downloaded file"),
         "build_file_content_template": attr.string(mandatory = True, doc = "BUILD file content template."),
         "package_name": attr.string(mandatory = True, doc = "Debian package name."),

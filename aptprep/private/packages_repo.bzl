@@ -98,7 +98,7 @@ def _generate_root_build_file(repo_name, packages, lockfile_label = None, config
             config_attr = '\n    config = "{}",'.format(config_label)
 
         packages_file_rule = '''generate_packages_file(
-    name = "generate_packages_index",
+    name = "Packages",
     lockfile = "{}",{}
     out = "Packages",
     visibility = ["//visibility:public"],

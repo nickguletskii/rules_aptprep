@@ -60,7 +60,12 @@ def _create_lockfile_package_repos(lockfile_repo_name, packages, build_template_
         package_arch = package_info["architecture"]
         download_url = package_info["download_url"]
         digest_info = package_info.get("digest", {})
-        sha256 = digest_info.get("value", "") if digest_info.get("algorithm") == "SHA256" else ""
+        digest_algorithm = digest_info.get("algorithm", "")
+        if digest_algorithm != "SHA256":
+            fail("Package '{}' has unsupported digest algorithm '{}'; only SHA256 is supported".format(package_key, digest_algorithm))
+        sha256 = digest_info.get("value", "")
+        if not sha256:
+            fail("Package '{}' has SHA256 digest algorithm but no value".format(package_key))
 
         sanitized_version = package_version.replace(":", "_")
         deb_filename = "{}_{}_{}.deb".format(package_name, sanitized_version, package_arch)
