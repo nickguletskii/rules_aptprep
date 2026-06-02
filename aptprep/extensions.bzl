@@ -57,8 +57,8 @@ _cc_toolchain_tag = tag_class(attrs = {
     "cxx_std": attr.string(default = "c++20"),
     "extra_compile_flags": attr.string_list(default = []),
     "extra_link_flags": attr.string_list(default = []),
-    "exec_constraints": attr.string_list(default = [], doc = "Extra exec constraints (host os/cpu added automatically)."),
-    "target_constraints": attr.string_list(default = [], doc = "Extra target constraints (target os/cpu added automatically)."),
+    "exec_constraints": attr.label_list(default = [], doc = "Extra exec constraints (host os/cpu added automatically). Labels are resolved against the calling module, so repo-relative `//:foo` refers to the caller's repo, not the generated toolchain repo."),
+    "target_constraints": attr.label_list(default = [], doc = "Extra target constraints (target os/cpu added automatically). Labels are resolved against the calling module, so repo-relative `//:foo` refers to the caller's repo, not the generated toolchain repo."),
 })
 
 _toolchain_tag = tag_class(attrs = {
@@ -268,6 +268,14 @@ def _aptprep_extension_impl(module_ctx):
             # loudly on an unknown compiler_arch.
             exec_cpu = gnu_cpu_arch_by_debian_arch(tag.compiler_arch)
 
+            # User-supplied constraints arrive as `Label`s (label_list), already
+            # resolved against the CALLING module. Render them as canonical
+            # `@@repo//pkg:name` strings so they keep their origin when emitted
+            # verbatim into the generated cc-toolchain repo's BUILD (a bare
+            # `//:foo` would otherwise re-resolve against that repo).
+            exec_constraint_strs = [str(label) for label in tag.exec_constraints]
+            target_constraint_strs = [str(label) for label in tag.target_constraints]
+
             cc_toolchain_repo(
                 name = tag.name,
                 target_triple = tag.target_triple,
@@ -285,11 +293,11 @@ def _aptprep_extension_impl(module_ctx):
                 exec_constraints = [
                     "@platforms//os:linux",
                     "@platforms//cpu:" + exec_cpu,
-                ] + tag.exec_constraints,
+                ] + exec_constraint_strs,
                 target_constraints = [
                     "@platforms//os:" + tag.target_os,
                     "@platforms//cpu:" + tag.target_arch,
-                ] + tag.target_constraints,
+                ] + target_constraint_strs,
             )
 
 aptprep = module_extension(

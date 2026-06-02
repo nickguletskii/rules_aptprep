@@ -52,3 +52,13 @@ patching_fixture = use_extension(
 )
 patching_fixture.fixture(name = "aptprep_patching_fixture")
 use_repo(patching_fixture, "aptprep_patching_fixture")
+
+# Test-only fixture extension for //aptprep/tests:cc_bootstrap_behavior_test.
+# Exercises the cc-toolchain bootstrap-degradation path (ungenerated sysroot ->
+# stub toolchain) with no network fetch. Keep as a dev_dependency.
+cc_bootstrap_fixture = use_extension(
+    "//aptprep/tests:cc_bootstrap_fixture_ext.bzl",
+    "cc_bootstrap_fixture",
+    dev_dependency = True,
+)
+use_repo(cc_bootstrap_fixture, "aptprep_cc_bootstrap_results")

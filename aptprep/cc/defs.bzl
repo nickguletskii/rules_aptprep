@@ -25,6 +25,23 @@ The repo rule (Unit D) knows both and supplies them in parallel.
 load("@rules_cc//cc:defs.bzl", "cc_toolchain")
 load("//aptprep/cc:cc_toolchain_config.bzl", "cc_toolchain_config")
 
+def _dedup(items):
+    """Order-preserving de-duplication of a label/string list.
+
+    Bazel rejects duplicate labels in `srcs`/`target_compatible_with`. Several
+    tools legitimately map to the SAME wrapper label (notably the bootstrap stub,
+    where every tool points at one failing wrapper), and a native toolchain has
+    `compiler_sysroot == target_sysroot` (so `:files` repeats). Dedup defensively
+    so these valid configurations don't trip Bazel's duplicate-label check.
+    """
+    seen = {}
+    out = []
+    for item in items:
+        if item not in seen:
+            seen[item] = True
+            out.append(item)
+    return out
+
 # buildifier: disable=unused-variable
 def aptprep_cc_toolchain(
         name,
@@ -140,8 +157,12 @@ def aptprep_cc_toolchain(
         dbg_compile_flags = dbg_compile_flags,
     )
 
-    compiler_sysroot_files = "@" + compiler_sysroot_repo + "//:files"
-    target_sysroot_files = "@" + target_sysroot_repo + "//:files"
+    # `compiler_sysroot_repo`/`target_sysroot_repo` are CANONICAL repo names
+    # (from `Label.repo_name`, which contains `+`/`++` separators). A canonical
+    # name must be referenced with the `@@` prefix; a single `@` is parsed as an
+    # apparent name and fails (`syntax error at '+'`).
+    compiler_sysroot_files = "@@" + compiler_sysroot_repo + "//:files"
+    target_sysroot_files = "@@" + target_sysroot_repo + "//:files"
 
     # §6.4 filegroup assignments determine sandbox inputs per action role.
     compile_wrappers = [wrappers[tool] for tool in ("gcc", "cpp") if tool in wrappers]
@@ -160,27 +181,27 @@ def aptprep_cc_toolchain(
 
     native.filegroup(
         name = name + "_compiler_files",
-        srcs = compile_wrappers + [compiler_sysroot_files, target_sysroot_files],
+        srcs = _dedup(compile_wrappers + [compiler_sysroot_files, target_sysroot_files]),
     )
     native.filegroup(
         name = name + "_linker_files",
-        srcs = link_wrappers + [compiler_sysroot_files, target_sysroot_files],
+        srcs = _dedup(link_wrappers + [compiler_sysroot_files, target_sysroot_files]),
     )
     native.filegroup(
         name = name + "_ar_files",
-        srcs = ar_wrapper + [compiler_sysroot_files],
+        srcs = _dedup(ar_wrapper + [compiler_sysroot_files]),
     )
     native.filegroup(
         name = name + "_strip_files",
-        srcs = strip_wrapper + [compiler_sysroot_files],
+        srcs = _dedup(strip_wrapper + [compiler_sysroot_files]),
     )
     native.filegroup(
         name = name + "_objcopy_files",
-        srcs = objcopy_wrapper + [compiler_sysroot_files],
+        srcs = _dedup(objcopy_wrapper + [compiler_sysroot_files]),
     )
     native.filegroup(
         name = name + "_dwp_files",
-        srcs = dwp_wrapper + [compiler_sysroot_files],
+        srcs = _dedup(dwp_wrapper + [compiler_sysroot_files]),
     )
 
     # `all_files` must be the complete sandbox-input closure: EVERY tool wrapper
@@ -207,7 +228,7 @@ def aptprep_cc_toolchain(
     ]
     native.filegroup(
         name = name + "_all_files",
-        srcs = all_wrappers + [compiler_sysroot_files, target_sysroot_files],
+        srcs = _dedup(all_wrappers + [compiler_sysroot_files, target_sysroot_files]),
     )
 
     # `supports_header_parsing` is a first-class `cc_toolchain` attribute in
@@ -232,10 +253,10 @@ def aptprep_cc_toolchain(
     native.toolchain(
         name = "toolchain",
         toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
-        exec_compatible_with = exec_constraints,
-        target_compatible_with = [
+        exec_compatible_with = _dedup(exec_constraints),
+        target_compatible_with = _dedup([
             "@platforms//os:" + target_os,
             "@platforms//cpu:" + target_arch,
-        ] + target_constraints,
+        ] + target_constraints),
         toolchain = ":" + name + "_cc_toolchain",
     )

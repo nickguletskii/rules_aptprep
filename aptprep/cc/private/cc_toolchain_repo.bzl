@@ -36,6 +36,10 @@ any action cwd.
 """
 
 load(
+    "//aptprep/private:packages_repo.bzl",
+    "APTPREP_FAKE_SYSROOT_MARKER",
+)
+load(
     "//aptprep/private:sysroot_repo.bzl",
     "gnu_cpu_arch_by_debian_arch",
     "multiarch_dir_by_debian_arch",
@@ -155,8 +159,112 @@ def _require_path(root, rel, what):
             "Check the package set in the relevant sysroot."
         ).format(what, p))
 
+# Every tool the toolchain advertises (keyed identically to `_TOOL_REAL_BINARY`).
+# Used by the stub path, which points all of them at one failing wrapper.
+_ALL_TOOLS = tuple(sorted(_TOOL_REAL_BINARY.keys()))
+
+def _sysroot_is_fake(repository_ctx, sysroot_label):
+    """True if `sysroot_label`'s repo is an ungenerated aptprep stand-in.
+
+    Detected by the sentinel marker `aptprep_fake_repo` drops at its root. We
+    resolve the marker as a label relative to the sysroot repo (rather than
+    string-mangling exec paths) so detection works regardless of canonical-name
+    mangling.
+    """
+    marker = repository_ctx.path(
+        sysroot_label.relative(":" + APTPREP_FAKE_SYSROOT_MARKER),
+    )
+    return marker.exists
+
+def _emit_stub_toolchain(repository_ctx, target_cpu):
+    """Render a STUB cc-toolchain for an ungenerated sysroot (bootstrap).
+
+    The stub registers a `toolchain()` with the SAME name and the SAME
+    exec/target constraints the real path uses, so `register_toolchains` +
+    toolchain resolution behave identically for selection. It reuses the public
+    `aptprep_cc_toolchain(...)` macro (so the generated structure matches the
+    real path), but points every `tool_paths` entry at a single wrapper that
+    prints an actionable error and exits non-zero — only ACTUAL C/C++
+    compilation against this toolchain fails; unrelated analysis (lockfile
+    generation, non-cc builds) proceeds.
+
+    No `_discover_libstdcxx_version` / `_require_path` validation runs here: a
+    fake sysroot has none of that content.
+    """
+    attr = repository_ctx.attr
+
+    # A single failing wrapper backs every tool. It echoes which arch's sysroot
+    # is missing and how to fix it, then exits non-zero so the C/C++ action
+    # fails loudly with an actionable message.
+    repository_ctx.template(
+        "wrappers/ungenerated.sh",
+        attr.stub_wrapper_template,
+        substitutions = {
+            "%{TARGET_ARCH}": attr.target_arch,
+            "%{TOOLCHAIN_NAME}": attr.toolchain_name,
+        },
+        executable = True,
+    )
+
+    # Reference the fake sysroots' empty `:files` filegroups so the macro's
+    # filegroups are valid; the wrapper is local to this repo.
+    self_repo = repository_ctx.name
+    stub_path = "external/" + self_repo + "/wrappers/ungenerated.sh"
+    wrappers = {tool: ":ungenerated_wrapper" for tool in _ALL_TOOLS}
+    tool_paths = {tool: stub_path for tool in _ALL_TOOLS}
+
+    wrapper_filegroups = (
+        'filegroup(\n    name = "ungenerated_wrapper",\n' +
+        '    srcs = ["wrappers/ungenerated.sh"],\n)'
+    )
+
+    repository_ctx.template(
+        "BUILD.bazel",
+        attr.build_tpl,
+        substitutions = {
+            "%{WRAPPER_FILEGROUPS}": wrapper_filegroups,
+            "%{NAME}": attr.toolchain_name,
+            "%{TARGET_TRIPLE}": attr.target_triple,
+            "%{TARGET_ARCH}": attr.target_arch,
+            "%{TARGET_CPU}": target_cpu,
+            "%{TARGET_OS}": attr.target_os,
+            "%{COMPILER_SYSROOT_REPO}": attr.compiler_sysroot.repo_name,
+            "%{TARGET_SYSROOT_REPO}": attr.target_sysroot.repo_name,
+            "%{COMPILER_SYSROOT_PATH}": _repo_prefix(attr.compiler_sysroot),
+            "%{TARGET_SYSROOT_PATH}": _repo_prefix(attr.target_sysroot),
+            "%{CLANG_VERSION}": attr.clang_version,
+            "%{CXX_STD}": attr.cxx_std,
+            # No real includes exist in a fake sysroot.
+            "%{CXX_BUILTIN_INCLUDE_DIRECTORIES}": _starlark_str_list([]),
+            "%{EXTRA_COMPILE_FLAGS}": _starlark_str_list(attr.extra_compile_flags),
+            "%{EXTRA_LINK_FLAGS}": _starlark_str_list(attr.extra_link_flags),
+            "%{EXEC_CONSTRAINTS}": _starlark_str_list(attr.exec_constraints),
+            "%{TARGET_CONSTRAINTS}": _starlark_str_list(attr.target_constraints),
+            "%{WRAPPERS}": _starlark_label_dict(wrappers, _ALL_TOOLS),
+            "%{TOOL_PATHS}": _starlark_str_dict(tool_paths, _ALL_TOOLS),
+        },
+    )
+
 def _cc_toolchain_repo_impl(repository_ctx):
     attr = repository_ctx.attr
+
+    # --- 0. Bootstrap degradation --------------------------------------------
+    # If either sysroot is an ungenerated aptprep stand-in (its lockfile has not
+    # been generated yet), emit a STUB toolchain that resolves identically but
+    # fails only on actual compilation. This breaks the cold-start deadlock
+    # where statically-registered cc-toolchains must load (and thus fetch their
+    # not-yet-generated sysroots) during resolution for ANY target.
+    target_cpu = _TARGET_CPU_BY_ARCH.get(attr.target_arch)
+    if not target_cpu:
+        fail("Unknown target_arch '{}'; known @platforms//cpu values: {}".format(
+            attr.target_arch,
+            sorted(_TARGET_CPU_BY_ARCH.keys()),
+        ))
+
+    if (_sysroot_is_fake(repository_ctx, attr.target_sysroot) or
+        _sysroot_is_fake(repository_ctx, attr.compiler_sysroot)):
+        _emit_stub_toolchain(repository_ctx, target_cpu)
+        return
 
     # --- 1. Resolve sysroot exec prefixes from Label.repo_name ---------------
     compiler_path = _repo_prefix(attr.compiler_sysroot)
@@ -170,12 +278,7 @@ def _cc_toolchain_repo_impl(repository_ctx):
     # the extension); resolve it here so misconfiguration fails at fetch time.
     gnu_cpu_arch_by_debian_arch(attr.compiler_arch)
 
-    target_cpu = _TARGET_CPU_BY_ARCH.get(attr.target_arch)
-    if not target_cpu:
-        fail("Unknown target_arch '{}'; known @platforms//cpu values: {}".format(
-            attr.target_arch,
-            sorted(_TARGET_CPU_BY_ARCH.keys()),
-        ))
+    # target_cpu was already resolved + validated in step 0 (above).
 
     clang_version = attr.clang_version
 
@@ -374,6 +477,11 @@ cc_toolchain_repo = repository_rule(
         "wrapper_template": attr.label(
             default = "//aptprep/cc/private:cc_tool_wrapper.sh.tpl",
             allow_single_file = True,
+        ),
+        "stub_wrapper_template": attr.label(
+            default = "//aptprep/cc/private:cc_stub_tool_wrapper.sh.tpl",
+            allow_single_file = True,
+            doc = "Failing wrapper rendered for an ungenerated (fake) sysroot.",
         ),
         "build_tpl": attr.label(
             default = "//aptprep/cc/private:cc_toolchain.BUILD.tpl",

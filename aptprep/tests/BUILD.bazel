@@ -1,3 +1,4 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load(":versions_test.bzl", "versions_test_suite")
 
 versions_test_suite(name = "versions_test")
@@ -10,4 +11,20 @@ sh_test(
     srcs = ["patching_behavior_test.sh"],
     args = ["$(location @aptprep_patching_fixture//:patch_results.txt)"],
     data = ["@aptprep_patching_fixture//:patch_results.txt"],
+)
+
+# Regression test for the cc-toolchain bootstrap-degradation path: an
+# ungenerated (fake) sysroot must yield a STUB toolchain that resolves but fails
+# only on actual compilation. Inputs come from the cc_bootstrap_fixture extension.
+sh_test(
+    name = "cc_bootstrap_behavior_test",
+    srcs = ["cc_bootstrap_behavior_test.sh"],
+    args = [
+        "$(location @aptprep_cc_bootstrap_results//:stub_BUILD.txt)",
+        "$(location @aptprep_cc_bootstrap_results//:stub_wrapper.txt)",
+    ],
+    data = [
+        "@aptprep_cc_bootstrap_results//:stub_BUILD.txt",
+        "@aptprep_cc_bootstrap_results//:stub_wrapper.txt",
+    ],
 )

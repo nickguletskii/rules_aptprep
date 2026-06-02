@@ -2,6 +2,7 @@ load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 
 exports_files([
     "cc_tool_wrapper.sh.tpl",
+    "cc_stub_tool_wrapper.sh.tpl",
     "cc_toolchain.BUILD.tpl",
 ])
 
@@ -9,5 +10,8 @@ bzl_library(
     name = "cc_toolchain_repo",
     srcs = ["cc_toolchain_repo.bzl"],
     visibility = ["//aptprep:__subpackages__"],
-    deps = ["//aptprep/private:sysroot_repo"],
+    deps = [
+        "//aptprep/private:packages_repo",
+        "//aptprep/private:sysroot_repo",
+    ],
 )
