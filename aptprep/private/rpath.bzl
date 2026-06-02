@@ -22,6 +22,19 @@ _DYNAMIC_LINKER_ARCH_BY_DEBIAN_ARCH = {
     "amd64": "x86-64",
 }
 
+# Multiarch dir per Debian arch. Mirrors the map in sysroot_repo.bzl; kept local
+# here to avoid an import cycle (sysroot_repo.bzl imports this module). Used to
+# locate the dynamic loader in usr-merged sysroots that have no top-level
+# `lib64/` (the loader instead lives under `usr/lib/<multiarch>/`).
+_MULTIARCH_DIR_BY_DEBIAN_ARCH = {
+    "amd64": "x86_64-linux-gnu",
+    "arm64": "aarch64-linux-gnu",
+    "armhf": "arm-linux-gnueabihf",
+    "i386": "i386-linux-gnu",
+    "ppc64el": "powerpc64le-linux-gnu",
+    "s390x": "s390x-linux-gnu",
+}
+
 def _list_files(rctx, busybox, directory = ".", *args):
     if not rctx.path(directory).exists:
         return []
@@ -81,16 +94,52 @@ def _fixup_interpreter(rctx, patchelf, path, interpreter):
 
 def _find_interpreter(rctx, busybox, arch):
     linker_arch = _DYNAMIC_LINKER_ARCH_BY_DEBIAN_ARCH.get(arch, arch).replace("_", "-")
-    candidates = _list_files(
-        rctx,
-        busybox,
-        "lib64/",
-        "-name",
-        "ld-linux-{}.so*".format(linker_arch),
-    )
-    for path in sorted(candidates, reverse = True):
-        return str(rctx.path(path).realpath)
+    name_glob = "ld-linux-{}.so*".format(linker_arch)
+
+    # Search the canonical loader locations in priority order. Classic layouts
+    # ship the loader in top-level `lib64/`/`lib/`; usr-merged sysroots (no
+    # top-level lib dirs — everything under `usr/`) ship it under the multiarch
+    # dir, so include `usr/lib/<multiarch>/` and `lib/<multiarch>/` too.
+    multiarch = _MULTIARCH_DIR_BY_DEBIAN_ARCH.get(arch)
+    search_dirs = ["lib64/", "lib/"]
+    if multiarch:
+        search_dirs.extend([
+            "usr/lib/{}/".format(multiarch),
+            "lib/{}/".format(multiarch),
+        ])
+
+    for directory in search_dirs:
+        candidates = _list_files(
+            rctx,
+            busybox,
+            directory,
+            "-maxdepth",
+            "1",
+            "-name",
+            name_glob,
+        )
+        for path in sorted(candidates, reverse = True):
+            return str(rctx.path(path).realpath)
     return None
+
+def _discover_llvm_bin_dirs(rctx):
+    """Find `usr/lib/llvm-<NN>/bin` dirs holding clang/lld/llvm executables.
+
+    These executables ship with the stock distro interpreter (the host loader
+    path) and are not covered by the static `patchelf_dirs` because their
+    `llvm-<NN>` version component is dynamic. We return them with a trailing `/`
+    so the caller scans them (`-maxdepth 1`) like any other patch dir.
+    """
+    base = rctx.path("usr/lib")
+    if not base.exists:
+        return []
+    dirs = []
+    for entry in base.readdir():
+        if entry.basename.startswith("llvm-"):
+            bin_dir = entry.get_child("bin")
+            if bin_dir.exists:
+                dirs.append("usr/lib/" + entry.basename + "/bin/")
+    return dirs
 
 def _matches_regex(rctx, busybox, path, pattern):
     cmd = [
@@ -163,6 +212,14 @@ def patch_binaries(rctx, busybox, patchelf, arch, patchelf_dirs = None):
 
     if patchelf_dirs == None:
         patchelf_dirs = rctx.attr.patchelf_dirs
+
+    # Auto-discover compiler-toolchain tool dirs that carry executables needing
+    # an interpreter rewrite but are NOT covered by the static patchelf_dirs
+    # (their version component is dynamic), notably the clang/llvm bin dir
+    # `usr/lib/llvm-<NN>/bin/`. Without rewriting clang's interpreter to the
+    # sysroot loader, a host loader would load the sysroot libc and fail with a
+    # GLIBC_PRIVATE symbol mismatch.
+    patchelf_dirs = list(patchelf_dirs) + _discover_llvm_bin_dirs(rctx)
 
     for directory in patchelf_dirs:
         for path in _list_files(rctx, busybox, directory, "-maxdepth", "1"):

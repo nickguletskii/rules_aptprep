@@ -13,26 +13,28 @@ through exec-relative `external/<repo_name>/...` path strings.
 
 ## tool_paths resolution strategy (DECISION)
 
-`cc_toolchain_config` consumes `tool_paths` values as CONCRETE exec-relative
-strings and performs NO label/location expansion. The wrapper scripts live in
-THIS generated repo, so their exec path is
-`external/<this_repo_canonical_name>/wrappers/<tool>.sh`. We obtain this repo's
-own canonical name from `repository_ctx.name` and build each `tool_paths` value
-as:
+`cc_toolchain_config` consumes `tool_paths` values as strings and performs NO
+label/location expansion, but `cc_common.create_cc_toolchain_config_info()`
+resolves each `tool_path` RELATIVE TO THE TOOLCHAIN CONFIG'S PACKAGE — i.e. the
+root package of THIS generated repo. Bazel therefore prepends this repo's exec
+prefix (`external/<this_repo_canonical_name>/`) itself. The wrapper scripts live
+at the repo root under `wrappers/<tool>.sh`, so each `tool_paths` value is the
+PACKAGE-RELATIVE path:
 
-    tool_paths[tool] = "external/" + repository_ctx.name + "/wrappers/" + tool + ".sh"
+    tool_paths[tool] = "wrappers/" + tool + ".sh"
+
+Using the `external/<self_repo>/...` exec-relative form here would double-prefix
+the path at action time (`external/<repo>/external/<repo>/wrappers/<tool>.sh`)
+and the wrapper would fail to exec.
 
 We therefore produce, for every tool, BOTH:
 
   * a wrapper LABEL (`":<tool>_wrapper"`, a per-tool filegroup declared in the
     generated BUILD) for the macro's `wrappers` arg (drives sandbox inputs), and
-  * the exec-path STRING above for the macro's `tool_paths` arg (consumed by the
-    config rule).
+  * the package-relative STRING above for the macro's `tool_paths` arg (consumed
+    by the config rule).
 
-`wrappers` and `tool_paths` are keyed by the SAME tool names. We deliberately do
-NOT use package-relative `wrappers/<tool>.sh`: the config rule wants the
-exec-relative `external/...` form so the path resolves against the execroot from
-any action cwd.
+`wrappers` and `tool_paths` are keyed by the SAME tool names.
 """
 
 load(
@@ -208,8 +210,7 @@ def _emit_stub_toolchain(repository_ctx, target_cpu):
 
     # Reference the fake sysroots' empty `:files` filegroups so the macro's
     # filegroups are valid; the wrapper is local to this repo.
-    self_repo = repository_ctx.name
-    stub_path = "external/" + self_repo + "/wrappers/ungenerated.sh"
+    stub_path = "wrappers/ungenerated.sh"
     wrappers = {tool: ":ungenerated_wrapper" for tool in _ALL_TOOLS}
     tool_paths = {tool: stub_path for tool in _ALL_TOOLS}
 
@@ -369,9 +370,10 @@ def _cc_toolchain_repo_impl(repository_ctx):
         cxx_builtin_include_directories.extend(_both_path_variants(entry))
 
     # --- 6. Render wrappers + build wrappers/tool_paths maps ------------------
-    # self_repo is this generated repo's own canonical name; its files are
-    # addressed as external/<self_repo>/wrappers/<tool>.sh (see module docstring).
-    self_repo = repository_ctx.name
+    # Wrapper `tool_paths` are package-relative (`wrappers/<tool>.sh`): the
+    # config rule resolves them against this generated repo's package (see
+    # module docstring), so they must NOT carry the `external/<self_repo>/`
+    # prefix (doing so double-prefixes the exec path at action time).
     wrappers = {}
     tool_paths = {}
     for tool, real in _TOOL_REAL_BINARY.items():
@@ -388,7 +390,7 @@ def _cc_toolchain_repo_impl(repository_ctx):
             executable = True,
         )
         wrappers[tool] = ":" + tool + "_wrapper"
-        tool_paths[tool] = "external/" + self_repo + "/wrappers/" + tool + ".sh"
+        tool_paths[tool] = "wrappers/" + tool + ".sh"
 
     tool_keys = sorted(_TOOL_REAL_BINARY.keys())
 

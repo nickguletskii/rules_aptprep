@@ -206,6 +206,38 @@ def _fix_sysroot_symlinks(rctx):
                 if ln_result.return_code != 0:
                     fail("Failed to rewrite sysroot symlink {} -> {}: {}".format(symlink_path, new_target, ln_result.stderr))
 
+def _ensure_usrmerge_symlinks(rctx):
+    """Create the usr-merge compatibility symlinks a sysroot needs.
+
+    Sysroots assembled purely from usr-merged Debian `.deb` data archives ship
+    every file under `usr/` and rely on the base filesystem's top-level
+    `lib`/`lib64`/`bin`/`sbin` -> `usr/...` symlinks, which are NOT part of any
+    individual package's data and so are absent here. Without them, absolute
+    paths inside GNU linker scripts (e.g. `libm.so`'s
+    `GROUP ( /lib/x86_64-linux-gnu/libm.so.6 ... )`, resolved sysroot-relative
+    by `--sysroot`) cannot be found. We create each link only when its top-level
+    name does not already exist and the `usr/<name>` target does, so real
+    layouts (non-usr-merged sysroots that ship a top-level `lib/`) are left
+    untouched.
+    """
+    for top, target in (
+        ("lib", "usr/lib"),
+        ("lib64", "usr/lib64"),
+        ("bin", "usr/bin"),
+        ("sbin", "usr/sbin"),
+    ):
+        if rctx.path(top).exists:
+            continue
+        if not rctx.path(target).exists:
+            continue
+        ln_result = rctx.execute(["ln", "-s", target, top])
+        if ln_result.return_code != 0:
+            fail("Failed to create usr-merge symlink {} -> {}: {}".format(
+                top,
+                target,
+                ln_result.stderr,
+            ))
+
 def _aptprep_sysroot_impl(repository_ctx):
     """Implementation for aptprep_sysroot repository rule."""
     packages_list = repository_ctx.attr.packages_list
@@ -305,6 +337,11 @@ def _aptprep_sysroot_impl(repository_ctx):
 
     # Fix symlinks in the sysroot
     _fix_sysroot_symlinks(repository_ctx)
+
+    # Add usr-merge compatibility symlinks (lib/lib64/bin/sbin -> usr/...) absent
+    # from package data archives. Done after symlink-fixing so the loop-guard
+    # there never sees (and deletes) them.
+    _ensure_usrmerge_symlinks(repository_ctx)
 
     # Add additional files to the sysroot
     for dest_path, source_label in add_files.items():
