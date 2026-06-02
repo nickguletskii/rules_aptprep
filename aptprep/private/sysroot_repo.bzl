@@ -70,6 +70,47 @@ def patchelf_dir_substitutions(arch):
 def expand_patchelf_dir_template(path_template, substitutions):
     return _expand_patchelf_dir_template(path_template, substitutions)
 
+def multiarch_dir_by_debian_arch(arch):
+    """Return the Debian multiarch dir (e.g. `x86_64-linux-gnu`) for a Debian arch.
+
+    Thin public accessor over the module-private `_MULTIARCH_DIR_BY_DEBIAN_ARCH`
+    map so other repo rules (e.g. the CC toolchain repo rule) can reuse it
+    without redefining the mapping. Fails loudly on an unknown arch.
+
+    Args:
+        arch: Debian architecture name (e.g. `amd64`, `arm64`).
+
+    Returns:
+        The multiarch directory string for `arch` (e.g. `x86_64-linux-gnu`).
+    """
+    multiarch = _MULTIARCH_DIR_BY_DEBIAN_ARCH.get(arch)
+    if not multiarch:
+        fail("Unknown Debian architecture '{}'; known: {}".format(
+            arch,
+            sorted(_MULTIARCH_DIR_BY_DEBIAN_ARCH.keys()),
+        ))
+    return multiarch
+
+def gnu_cpu_arch_by_debian_arch(arch):
+    """Return the GNU CPU arch (e.g. `x86_64`) for a Debian arch.
+
+    Thin public accessor over the module-private `_GNU_CPU_ARCH_BY_DEBIAN_ARCH`
+    map. Fails loudly on an unknown arch.
+
+    Args:
+        arch: Debian architecture name (e.g. `amd64`, `arm64`).
+
+    Returns:
+        The GNU CPU architecture string for `arch` (e.g. `x86_64`, `aarch64`).
+    """
+    gnu_cpu = _GNU_CPU_ARCH_BY_DEBIAN_ARCH.get(arch)
+    if not gnu_cpu:
+        fail("Unknown Debian architecture '{}'; known: {}".format(
+            arch,
+            sorted(_GNU_CPU_ARCH_BY_DEBIAN_ARCH.keys()),
+        ))
+    return gnu_cpu
+
 def _dirname(path):
     parts = path.rsplit("/", 1)
     if len(parts) == 2:
@@ -137,34 +178,33 @@ def _fix_sysroot_symlinks(rctx):
 
         return True  # Target is at or above symlink directory
 
-    # Find all symlinks and fix them
     find_result = rctx.execute(["find", ".", "-type", "l"])
-    if find_result.return_code == 0:
-        for symlink_path in find_result.stdout.splitlines():
-            # Get the target of the symlink
-            readlink_result = rctx.execute(["readlink", symlink_path])
-            if readlink_result.return_code == 0:
-                target = readlink_result.stdout.strip()
-                if would_create_loop(symlink_path, target):
-                    rctx.delete(symlink_path)
+    if find_result.return_code != 0:
+        fail("Failed to enumerate sysroot symlinks with `find`; install findutils or make `find` available in PATH: {}".format(find_result.stderr))
 
-                    # print("Removed symlink that would create loop: {}".format(symlink_path))
-                    continue
-                if target.startswith("/"):
-                    # we get something like './some/path/lib.so` for `symlink_path`
-                    # so we subtract 2 for the leading `.` and the filename
-                    levels = [".." for _ in range(len(symlink_path.split("/")) - 2)]
-                    new_target = "/".join(levels) + target
-                    rctx.delete(symlink_path)
+    for symlink_path in find_result.stdout.splitlines():
+        readlink_result = rctx.execute(["readlink", symlink_path])
+        if readlink_result.return_code != 0:
+            fail("Failed to inspect sysroot symlink {} with `readlink`: {}".format(symlink_path, readlink_result.stderr))
 
-                    # Only fix the symlink if it doesn't create a loop
-                    if not would_create_loop(symlink_path, new_target):
-                        # preferably this would be a`rctx.symlink(new_target, symlink_path)`
-                        # but that normalizes `new_target`
-                        rctx.execute(["ln", "-s", new_target, symlink_path])
-                    else:
-                        pass
-                        # print("Removed symlink that would create loop: {}".format(symlink_path))
+        target = readlink_result.stdout.strip()
+        if would_create_loop(symlink_path, target):
+            rctx.delete(symlink_path)
+            continue
+        if target.startswith("/"):
+            # we get something like './some/path/lib.so` for `symlink_path`
+            # so we subtract 2 for the leading `.` and the filename
+            levels = [".." for _ in range(len(symlink_path.split("/")) - 2)]
+            new_target = "/".join(levels) + target
+            rctx.delete(symlink_path)
+
+            # Only fix the symlink if it doesn't create a loop
+            if not would_create_loop(symlink_path, new_target):
+                # preferably this would be a`rctx.symlink(new_target, symlink_path)`
+                # but that normalizes `new_target`
+                ln_result = rctx.execute(["ln", "-s", new_target, symlink_path])
+                if ln_result.return_code != 0:
+                    fail("Failed to rewrite sysroot symlink {} -> {}: {}".format(symlink_path, new_target, ln_result.stderr))
 
 def _aptprep_sysroot_impl(repository_ctx):
     """Implementation for aptprep_sysroot repository rule."""
