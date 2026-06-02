@@ -1,9 +1,22 @@
 """Module extension for aptprep lockfile integration and toolchain support."""
 
+load("//aptprep/cc/private:cc_toolchain_repo.bzl", "cc_toolchain_repo")  # buildifier: disable=bzl-visibility
 load("//aptprep/private:deb_file_repo.bzl", "deb_file_repo")
 load("//aptprep/private:packages_repo.bzl", "aptprep_fake_repo", "aptprep_main_repo")
-load("//aptprep/private:sysroot_repo.bzl", "aptprep_sysroot")
+load("//aptprep/private:sysroot_repo.bzl", "aptprep_sysroot", "gnu_cpu_arch_by_debian_arch")
 load(":repositories.bzl", "aptprep_register_toolchains")
+
+# Reverse of `_GNU_CPU_ARCH_BY_DEBIAN_ARCH` in sysroot_repo.bzl: maps a
+# `@platforms//cpu` value (user-facing `target_arch`) to its Debian arch, used
+# to derive the target sysroot multiarch layout in cc_toolchain_repo.
+_DEBIAN_ARCH_BY_GNU_CPU = {
+    "x86_64": "amd64",
+    "aarch64": "arm64",
+    "arm": "armhf",
+    "i386": "i386",
+    "powerpc64le": "ppc64el",
+    "s390x": "s390x",
+}
 
 _lockfile_tag = tag_class(attrs = {
     "lockfile_name": attr.string(mandatory = True, doc = "Name used to resolve lockfile data in packages/sysroot tags."),
@@ -29,6 +42,23 @@ _sysroot_tag = tag_class(attrs = {
     "patch_binaries": attr.bool(default = True, doc = "Whether to patch binaries in the extracted sysroot (rpath/interpreter fixups)."),
     "patch_binaries_whitelist_regex": attr.string_list(default = [], doc = "Optional list of regex patterns. If non-empty, only files matching at least one pattern are patched."),
     "patch_binaries_blacklist_regex": attr.string_list(default = [], doc = "Optional list of regex patterns. Files matching any pattern are skipped."),
+})
+
+_cc_toolchain_tag = tag_class(attrs = {
+    "name": attr.string(mandatory = True, doc = "Generated repository name."),
+    "target_triple": attr.string(mandatory = True, doc = "clang --target value."),
+    "target_arch": attr.string(mandatory = True, doc = "@platforms//cpu value, e.g. aarch64/x86_64."),
+    "target_os": attr.string(default = "linux"),
+    "compiler_sysroot": attr.label(mandatory = True, doc = "Sysroot with clang/lld; runs on the build host."),
+    "compiler_arch": attr.string(default = "amd64", doc = "Debian arch of the compiler sysroot."),
+    "target_sysroot": attr.label(mandatory = True, doc = "Sysroot with target headers/libs."),
+    "clang_version": attr.string(mandatory = True, doc = "Distro clang major version."),
+    "libstdcxx_version": attr.string(default = "", doc = "Override libstdc++ include version; auto-discovered if empty."),
+    "cxx_std": attr.string(default = "c++20"),
+    "extra_compile_flags": attr.string_list(default = []),
+    "extra_link_flags": attr.string_list(default = []),
+    "exec_constraints": attr.string_list(default = [], doc = "Extra exec constraints (host os/cpu added automatically)."),
+    "target_constraints": attr.string_list(default = [], doc = "Extra target constraints (target os/cpu added automatically)."),
 })
 
 _toolchain_tag = tag_class(attrs = {
@@ -224,12 +254,51 @@ def _aptprep_extension_impl(module_ctx):
 
             aptprep_sysroot(**kwargs)
 
+    for module in module_ctx.modules:
+        for tag in module.tags.cc_toolchain:
+            if tag.target_arch not in _DEBIAN_ARCH_BY_GNU_CPU:
+                fail("aptprep.cc_toolchain(name = '{}') has unknown target_arch '{}'; known @platforms//cpu values: {}".format(
+                    tag.name,
+                    tag.target_arch,
+                    sorted(_DEBIAN_ARCH_BY_GNU_CPU.keys()),
+                ))
+
+            # The exec platform is the COMPILER sysroot's host, not the fetch
+            # machine and not the target. gnu_cpu_arch_by_debian_arch fails
+            # loudly on an unknown compiler_arch.
+            exec_cpu = gnu_cpu_arch_by_debian_arch(tag.compiler_arch)
+
+            cc_toolchain_repo(
+                name = tag.name,
+                target_triple = tag.target_triple,
+                target_arch = tag.target_arch,
+                target_os = tag.target_os,
+                compiler_sysroot = tag.compiler_sysroot,
+                compiler_arch = tag.compiler_arch,
+                target_sysroot = tag.target_sysroot,
+                target_debian_arch = _DEBIAN_ARCH_BY_GNU_CPU[tag.target_arch],
+                clang_version = tag.clang_version,
+                libstdcxx_version = tag.libstdcxx_version,
+                cxx_std = tag.cxx_std,
+                extra_compile_flags = tag.extra_compile_flags,
+                extra_link_flags = tag.extra_link_flags,
+                exec_constraints = [
+                    "@platforms//os:linux",
+                    "@platforms//cpu:" + exec_cpu,
+                ] + tag.exec_constraints,
+                target_constraints = [
+                    "@platforms//os:" + tag.target_os,
+                    "@platforms//cpu:" + tag.target_arch,
+                ] + tag.target_constraints,
+            )
+
 aptprep = module_extension(
     implementation = _aptprep_extension_impl,
     tag_classes = {
         "lockfile": _lockfile_tag,
         "packages": _packages_tag,
         "sysroot": _sysroot_tag,
+        "cc_toolchain": _cc_toolchain_tag,
         "toolchain": _toolchain_tag,
     },
     doc = "Extension for importing aptprep lockfiles and registering aptprep toolchains.",
