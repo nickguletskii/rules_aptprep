@@ -1,0 +1,91 @@
+bazel_dep(name = "rules_aptprep", version = "0.0.0", dev_dependency = True)
+bazel_dep(name = "bazel_skylib", version = "1.7.1", dev_dependency = True)
+bazel_dep(name = "rules_shell", version = "0.6.1", dev_dependency = True)
+bazel_dep(name = "platforms", version = "0.0.11", dev_dependency = True)
+bazel_dep(name = "rules_cc", version = "0.2.19", dev_dependency = True)
+
+local_path_override(
+    module_name = "rules_aptprep",
+    path = "../..",
+)
+
+aptprep = use_extension("@rules_aptprep//aptprep:extensions.bzl", "aptprep")
+aptprep.toolchain(
+    archive_url = "https://github.com/nickguletskii/aptprep/releases/download/v0.1.2/aptprep_linux_x86_64.tar",
+    sha256 = "4d1b992540fb9856561f101d8ef4a54b7e74529a65171468f7940933ad0a0e52",
+)
+aptprep.lockfile(
+    config = "//:aptprep.yaml",
+    lockfile = "//:lockfile.json",
+    lockfile_name = "cc",
+)
+
+# Toolchain package set, shared by both target sysroots. The amd64 sysroot
+# doubles as the COMPILER sysroot (it ships the multi-target clang/lld/llvm
+# binaries); both target sysroots supply the target headers, libc, libstdc++
+# and the GCC install layout (usr/lib/gcc/<multiarch>/13) for --gcc-toolchain.
+_CC_PACKAGES = [
+    "clang-18",
+    "lld-18",
+    "llvm-18",
+    "binutils",
+    "libc6-dev",
+    "linux-libc-dev",
+    "libstdc++-13-dev",
+    "libgcc-13-dev",
+    "gcc-13",
+    "g++-13",
+]
+
+aptprep.sysroot(
+    architecture = "amd64",
+    lockfile_name = "cc",
+    packages_list = _CC_PACKAGES,
+    repo_name = "cc_sysroot_amd64",
+)
+aptprep.sysroot(
+    architecture = "arm64",
+    lockfile_name = "cc",
+    packages_list = _CC_PACKAGES,
+    repo_name = "cc_sysroot_arm64",
+)
+
+# Native amd64 toolchain: the compiler and target sysroots are identical.
+aptprep.cc_toolchain(
+    name = "cc_x86_64",
+    clang_version = "18",
+    compiler_arch = "amd64",
+    compiler_sysroot = "@cc_sysroot_amd64",
+    libstdcxx_version = "13",
+    target_arch = "x86_64",
+    target_sysroot = "@cc_sysroot_amd64",
+    target_triple = "x86_64-unknown-linux-gnu",
+)
+
+# Cross aarch64 toolchain: host clang (amd64 compiler sysroot) targeting the
+# arm64 sysroot.
+aptprep.cc_toolchain(
+    name = "cc_aarch64",
+    clang_version = "18",
+    compiler_arch = "amd64",
+    compiler_sysroot = "@cc_sysroot_amd64",
+    libstdcxx_version = "13",
+    target_arch = "aarch64",
+    target_sysroot = "@cc_sysroot_arm64",
+    target_triple = "aarch64-unknown-linux-gnu",
+)
+use_repo(
+    aptprep,
+    "aptprep_binary_archive",
+    "aptprep_toolchains",
+    "cc_aarch64",
+    "cc_sysroot_amd64",
+    "cc_sysroot_arm64",
+    "cc_x86_64",
+)
+
+register_toolchains(
+    "@aptprep_toolchains//:all",
+    "@cc_x86_64//:toolchain",
+    "@cc_aarch64//:toolchain",
+)

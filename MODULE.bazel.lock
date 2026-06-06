@@ -18,8 +18,9 @@
     "https://bcr.bazel.build/modules/bazel_features/1.18.0/MODULE.bazel": "1be0ae2557ab3a72a57aeb31b29be347bcdc5d2b1eb1e70f39e3851a7e97041a",
     "https://bcr.bazel.build/modules/bazel_features/1.19.0/MODULE.bazel": "59adcdf28230d220f0067b1f435b8537dd033bfff8db21335ef9217919c7fb58",
     "https://bcr.bazel.build/modules/bazel_features/1.30.0/MODULE.bazel": "a14b62d05969a293b80257e72e597c2da7f717e1e69fa8b339703ed6731bec87",
-    "https://bcr.bazel.build/modules/bazel_features/1.30.0/source.json": "b07e17f067fe4f69f90b03b36ef1e08fe0d1f3cac254c1241a1818773e3423bc",
     "https://bcr.bazel.build/modules/bazel_features/1.4.1/MODULE.bazel": "e45b6bb2350aff3e442ae1111c555e27eac1d915e77775f6fdc4b351b758b5d7",
+    "https://bcr.bazel.build/modules/bazel_features/1.47.0/MODULE.bazel": "e34df3cb35b1684cfa69923a61ae3803595babd3942cd306a488d51400886b30",
+    "https://bcr.bazel.build/modules/bazel_features/1.47.0/source.json": "4ba0b5138327f2d73352a51547a4e49a0a828ef400e046b15334d8905bf6b7ff",
     "https://bcr.bazel.build/modules/bazel_features/1.9.0/MODULE.bazel": "885151d58d90d8d9c811eb75e3288c11f850e1d6b481a8c9f766adee4712358b",
     "https://bcr.bazel.build/modules/bazel_features/1.9.1/MODULE.bazel": "8f679097876a9b609ad1f60249c49d68bfab783dd9be012faf9d82547b14815a",
     "https://bcr.bazel.build/modules/bazel_lib/3.0.0/MODULE.bazel": "22b70b80ac89ad3f3772526cd9feee2fa412c2b01933fea7ed13238a448d370d",
@@ -35,6 +36,7 @@
     "https://bcr.bazel.build/modules/bazel_skylib/1.6.1/MODULE.bazel": "8fdee2dbaace6c252131c00e1de4b165dc65af02ea278476187765e1a617b917",
     "https://bcr.bazel.build/modules/bazel_skylib/1.7.0/MODULE.bazel": "0db596f4563de7938de764cc8deeabec291f55e8ec15299718b93c4423e9796d",
     "https://bcr.bazel.build/modules/bazel_skylib/1.7.1/MODULE.bazel": "3120d80c5861aa616222ec015332e5f8d3171e062e3e804a2a0253e1be26e59b",
+    "https://bcr.bazel.build/modules/bazel_skylib/1.8.0/MODULE.bazel": "2fb3fb53675f6adfc1ca5bfbd5cfb655ae350fba4706d924a8ec7e3ba945671c",
     "https://bcr.bazel.build/modules/bazel_skylib/1.8.1/MODULE.bazel": "88ade7293becda963e0e3ea33e7d54d3425127e0a326e0d17da085a5f1f03ff6",
     "https://bcr.bazel.build/modules/bazel_skylib/1.8.1/source.json": "7ebaefba0b03efe59cac88ed5bbc67bcf59a3eff33af937345ede2a38b2d368a",
     "https://bcr.bazel.build/modules/bazel_skylib_gazelle_plugin/1.4.1/MODULE.bazel": "50447bdca4e2fb6d46bbbe724d831447b1c4e0ce845a0fd61f8c8d7103d8eea1",
@@ -96,7 +98,8 @@
     "https://bcr.bazel.build/modules/rules_cc/0.0.8/MODULE.bazel": "964c85c82cfeb6f3855e6a07054fdb159aced38e99a5eecf7bce9d53990afa3e",
     "https://bcr.bazel.build/modules/rules_cc/0.0.9/MODULE.bazel": "836e76439f354b89afe6a911a7adf59a6b2518fafb174483ad78a2a2fde7b1c5",
     "https://bcr.bazel.build/modules/rules_cc/0.1.1/MODULE.bazel": "2f0222a6f229f0bf44cd711dc13c858dad98c62d52bd51d8fc3a764a83125513",
-    "https://bcr.bazel.build/modules/rules_cc/0.1.1/source.json": "d61627377bd7dd1da4652063e368d9366fc9a73920bfa396798ad92172cf645c",
+    "https://bcr.bazel.build/modules/rules_cc/0.2.19/MODULE.bazel": "d5e0f05b63273281a16654eb6b1a8742a75ec153ac8b4f0419949d6e401e46f0",
+    "https://bcr.bazel.build/modules/rules_cc/0.2.19/source.json": "1ef48cdbd7aa6238015189b582d3d74ef0cbea3cb3e2cb259d782463f570c14a",
     "https://bcr.bazel.build/modules/rules_foreign_cc/0.9.0/MODULE.bazel": "c9e8c682bf75b0e7c704166d79b599f93b72cfca5ad7477df596947891feeef6",
     "https://bcr.bazel.build/modules/rules_fuzzing/0.5.2/MODULE.bazel": "40c97d1144356f52905566c55811f13b299453a14ac7769dfba2ac38192337a8",
     "https://bcr.bazel.build/modules/rules_fuzzing/0.5.2/source.json": "c8b1e2c717646f1702290959a3302a178fb639d987ab61d548105019f11e527e",
@@ -171,9 +174,55 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//aptprep/tests:cc_bootstrap_fixture_ext.bzl%cc_bootstrap_fixture": {
+      "general": {
+        "bzlTransitiveDigest": "+XQvYz0PFEQ+20sQYAPwkLUkeMFfmwcZKseD0nL4JkI=",
+        "usagesDigest": "VoPi3pVP/lBNI1ZxYSVuuaFiXLVdKW7ibC1BLqsSrnE=",
+        "recordedFileInputs": {},
+        "recordedDirentsInputs": {},
+        "envVariables": {},
+        "generatedRepoSpecs": {
+          "aptprep_cc_bootstrap_fake_sysroot": {
+            "repoRuleId": "@@//aptprep/private:packages_repo.bzl%aptprep_fake_repo",
+            "attributes": {
+              "repo_name": "aptprep_cc_bootstrap_fake_sysroot"
+            }
+          },
+          "aptprep_cc_bootstrap_stub": {
+            "repoRuleId": "@@//aptprep/cc/private:cc_toolchain_repo.bzl%cc_toolchain_repo",
+            "attributes": {
+              "target_triple": "aarch64-unknown-linux-gnu",
+              "target_arch": "aarch64",
+              "target_os": "linux",
+              "compiler_sysroot": "@@+cc_bootstrap_fixture+aptprep_cc_bootstrap_fake_sysroot//:aptprep_cc_bootstrap_fake_sysroot",
+              "compiler_arch": "amd64",
+              "target_sysroot": "@@+cc_bootstrap_fixture+aptprep_cc_bootstrap_fake_sysroot//:aptprep_cc_bootstrap_fake_sysroot",
+              "target_debian_arch": "arm64",
+              "clang_version": "18",
+              "exec_constraints": [
+                "@platforms//os:linux",
+                "@platforms//cpu:x86_64"
+              ],
+              "target_constraints": [
+                "@platforms//os:linux",
+                "@platforms//cpu:aarch64"
+              ]
+            }
+          },
+          "aptprep_cc_bootstrap_results": {
+            "repoRuleId": "@@//aptprep/tests:cc_bootstrap_fixture_ext.bzl%_collect_repo",
+            "attributes": {
+              "stub_build": "@@+cc_bootstrap_fixture+aptprep_cc_bootstrap_stub//:BUILD.bazel",
+              "stub_wrapper": "@@+cc_bootstrap_fixture+aptprep_cc_bootstrap_stub//:wrappers/ungenerated.sh"
+            }
+          }
+        },
+        "recordedRepoMappingEntries": []
+      }
+    },
     "//aptprep/tests:patching_fixture_ext.bzl%patching_fixture": {
       "general": {
-        "bzlTransitiveDigest": "gawQxrxNSNEKi8PPMPdcpLy2b4CNUPjdd4FUqD1eIjI=",
+        "bzlTransitiveDigest": "NC7mkUZxAz6ayftBsUB7dtw23oArRUL7DyKMi72bY7U=",
         "usagesDigest": "wsLzMHqJ/ZBaqxbD+7248/T8NptEpCEBtQxxAWaNqG4=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},

@@ -1,0 +1,23 @@
+output:
+  path: "./packages"
+  target_architectures: ["amd64", "arm64"]
+source_repositories:
+  # snapshot.ubuntu.com's main /ubuntu/ tree carries every release arch for
+  # noble (amd64 arm64 armhf i386 ppc64el riscv64 s390x), so both amd64 and
+  # arm64 are served from the same snapshot. The /ubuntu-ports/ path on
+  # snapshot.ubuntu.com is not publicly served (HTTP 401), unlike the live
+  # ports.ubuntu.com mirror.
+  - source_url: "https://snapshot.ubuntu.com/ubuntu/20260602T000000Z"
+    architectures: ["amd64", "arm64"]
+    distributions: ["noble", "noble-updates"]
+packages:
+  - "clang-18"
+  - "lld-18"
+  - "llvm-18"
+  - "binutils"
+  - "libc6-dev"
+  - "linux-libc-dev"
+  - "libstdc++-13-dev"
+  - "libgcc-13-dev"
+  - "gcc-13"
+  - "g++-13"

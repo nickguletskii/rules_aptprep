@@ -52,7 +52,10 @@ register_toolchains("@aptprep_toolchains//:all")
 
 ## Usage
 
-For a complete working example, see [e2e/smoke/](./e2e/smoke/).
+For a complete working example, see [e2e/smoke/](./e2e/smoke/). For generating a
+`rules_cc` C/C++ toolchain (native `linux/x86_64` + cross `linux/aarch64`) from
+aptprep sysroots, see [docs/cc-toolchain.md](./docs/cc-toolchain.md) and the
+runnable [e2e/cc/](./e2e/cc/) module.
 
 ### Toolchain Extension
 
