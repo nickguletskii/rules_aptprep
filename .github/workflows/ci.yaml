@@ -29,10 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - id: bazel_8
-        run: echo "bazelversion=8.4.2" >> $GITHUB_OUTPUT
+      - id: bazel_9
+        run: echo "bazelversion=$(head -n 1 .bazelversion)" >> $GITHUB_OUTPUT
     outputs:
-      # Will look like ["<version from .bazelversion>", "x.y.z"]
+      # Tracks the version pinned in .bazelversion (Bazel 9+ only).
       bazelversions: ${{ toJSON(steps.*.outputs.bazelversion) }}
   test:
     # The type of runner that the job will run on
