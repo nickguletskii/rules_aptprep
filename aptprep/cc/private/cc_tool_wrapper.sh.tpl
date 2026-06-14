@@ -93,14 +93,18 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 # On compile entry points, redact date/time macros so emitted binaries are
-# reproducible. The literal token "redacted" must land in the preprocessor
-# define, hence the quoting.
+# reproducible. These macros expand to string literals in C/C++, so the
+# preprocessor replacement text must itself be the quoted token "redacted"
+# (with the double quotes). The double quotes are wrapped in single quotes so
+# bash preserves them in the argument value rather than stripping them; each
+# array element therefore carries the literal -D__DATE__="redacted" through to
+# the real compiler.
 if [[ "%{IS_COMPILE}" == "1" ]]; then
   ARGS+=(
     -Wno-builtin-macro-redefined
-    -D__DATE__="redacted"
-    -D__TIME__="redacted"
-    -D__TIMESTAMP__="redacted"
+    -D__DATE__='"redacted"'
+    -D__TIME__='"redacted"'
+    -D__TIMESTAMP__='"redacted"'
   )
 fi
 
