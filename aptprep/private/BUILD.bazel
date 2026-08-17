@@ -8,14 +8,37 @@ exports_files([
 ])
 
 bzl_library(
-    name = "toolchains_repo",
-    srcs = ["toolchains_repo.bzl"],
+    name = "packages_repo",
+    srcs = ["packages_repo.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
+    deps = ["@bazel_tools//tools/build_defs/repo:http.bzl"],
+)
+
+bzl_library(
+    name = "sysroot_repo",
+    srcs = ["sysroot_repo.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
+    deps = [
+        ":archive_extraction",
+        ":rpath",
+    ],
+)
+
+bzl_library(
+    name = "archive_extraction",
+    srcs = ["archive_extraction.bzl"],
     visibility = ["//aptprep:__subpackages__"],
 )
 
 bzl_library(
-    name = "versions",
-    srcs = ["versions.bzl"],
+    name = "deb_file_repo",
+    srcs = ["deb_file_repo.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
+)
+
+bzl_library(
+    name = "generate_packages",
+    srcs = ["generate_packages.bzl"],
     visibility = ["//aptprep:__subpackages__"],
 )
 
@@ -26,27 +49,19 @@ bzl_library(
 )
 
 bzl_library(
-    name = "packages_repo",
-    srcs = ["packages_repo.bzl"],
-    visibility = ["//aptprep:__subpackages__"],
-    deps = ["@bazel_tools//tools/build_defs/repo:http.bzl"],
-)
-
-bzl_library(
-    name = "deb_file_repo",
-    srcs = ["deb_file_repo.bzl"],
-    visibility = ["//aptprep:__subpackages__"],
-)
-
-bzl_library(
     name = "rpath",
     srcs = ["rpath.bzl"],
     visibility = ["//aptprep:__subpackages__"],
 )
 
 bzl_library(
-    name = "sysroot_repo",
-    srcs = ["sysroot_repo.bzl"],
+    name = "toolchains_repo",
+    srcs = ["toolchains_repo.bzl"],
     visibility = ["//aptprep:__subpackages__"],
-    deps = [":rpath"],
+)
+
+bzl_library(
+    name = "versions",
+    srcs = ["versions.bzl"],
+    visibility = ["//aptprep:__subpackages__"],
 )

@@ -222,9 +222,10 @@
   "moduleExtensions": {
     "//:extraction_comparison_ext.bzl%extraction_comparison": {
       "general": {
-        "bzlTransitiveDigest": "l19hixrXD6XTrbwzNAshcvf+np6AY+6RopRjwRszo+4=",
-        "usagesDigest": "YUkxIeEab4Zn2NthRAYYvulWf+qRxK5yWp5WE+p0Qi4=",
+        "bzlTransitiveDigest": "ehkTCVtdU8F9ubfRLSpiN0dDtl3yrW96wnCKvFjjouw=",
+        "usagesDigest": "voUsSc0uSnw4sf2yYNKMsXuoiTEZLt6OX5Mcqti4zAs=",
         "recordedInputs": [
+          "ENV:APTPREP_ARCHIVE_EXTRACTOR \\0",
           "REPO_MAPPING:,aptprep_smoke_sysroot_bazel rules_aptprep++aptprep+aptprep_smoke_sysroot_bazel",
           "REPO_MAPPING:,aptprep_smoke_sysroot_tar rules_aptprep++aptprep+aptprep_smoke_sysroot_tar"
         ],
@@ -242,7 +243,7 @@
     },
     "@@rules_aptprep+//aptprep:extensions.bzl%aptprep": {
       "general": {
-        "bzlTransitiveDigest": "fo/oi4rIqQjinz/v2qAFwejVSKyTByCVqzRJrermiKU=",
+        "bzlTransitiveDigest": "gAEvu5QXMojdAjBW4KBIeOKrlKGt3m4unn0IV6mzCuk=",
         "usagesDigest": "gYmImygNf+66Vw78pARKi7rJlmHXwFk5DMrxW3K/kFc=",
         "recordedInputs": [
           "FILE:@@//lockfile.json 51b077dcc00ccc4628f62bb6837ada4b0e5d6a7e4c57e0946c92abc6a7a02d71",

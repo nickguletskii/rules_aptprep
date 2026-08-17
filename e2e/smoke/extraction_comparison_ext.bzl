@@ -1,5 +1,24 @@
 """Test-only comparison of sysroots produced by both archive extractors."""
 
+def extractor_comparison_override_error(environ):
+    """Check whether the environment invalidates extractor comparison.
+
+    Args:
+        environ: The environment map. A missing or empty
+            `APTPREP_ARCHIVE_EXTRACTOR` permits comparison.
+
+    Returns:
+        `None` when comparison is valid; otherwise an error explaining that the
+        override would force both trees to use the same extractor.
+    """
+    override = environ.get("APTPREP_ARCHIVE_EXTRACTOR", "")
+    if not override:
+        return None
+    return (
+        "APTPREP_ARCHIVE_EXTRACTOR must be unset for extractor comparison; " +
+        "setting it to '{}' would force both sysroots to use the same extractor"
+    ).format(override)
+
 def _comparison_repo_impl(rctx):
     tar_root = rctx.path(rctx.attr.tar_manifest).dirname
     bazel_root = rctx.path(rctx.attr.bazel_manifest).dirname
@@ -41,6 +60,10 @@ _comparison_tag = tag_class(attrs = {
 })
 
 def _extraction_comparison_impl(module_ctx):
+    override_error = extractor_comparison_override_error(module_ctx.os.environ)
+    if override_error != None:
+        fail(override_error)
+
     root = module_ctx.modules[0]
     for tag in root.tags.compare:
         _comparison_repo(
@@ -51,6 +74,7 @@ def _extraction_comparison_impl(module_ctx):
         )
 
 extraction_comparison = module_extension(
+    environ = ["APTPREP_ARCHIVE_EXTRACTOR"],
     implementation = _extraction_comparison_impl,
     tag_classes = {"compare": _comparison_tag},
 )

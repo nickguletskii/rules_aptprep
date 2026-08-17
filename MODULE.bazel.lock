@@ -227,9 +227,22 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//aptprep/tests:archive_extraction_fixture_ext.bzl%archive_extraction_fixture": {
+      "general": {
+        "bzlTransitiveDigest": "Fd1NjyRqdNbEZ6VvTPPvwcNkLXf+6T+n9HAtyKbEI4w=",
+        "usagesDigest": "vKXZpFVt1g+vIcwZX+gfCgWD4eLjhNBM11mcww3z4Kw=",
+        "recordedInputs": [],
+        "generatedRepoSpecs": {
+          "aptprep_archive_extraction_fixture": {
+            "repoRuleId": "@@//aptprep/tests:archive_extraction_fixture_ext.bzl%_archive_extraction_fixture_repo",
+            "attributes": {}
+          }
+        }
+      }
+    },
     "//aptprep/tests:cc_bootstrap_fixture_ext.bzl%cc_bootstrap_fixture": {
       "general": {
-        "bzlTransitiveDigest": "6oqgJE9wmxu4JTUNr1M5chY/+GhqV6WeH0Jp+c5Dew4=",
+        "bzlTransitiveDigest": "QvZIjbeESrKea5veKQA3p36e95LhDl252MFG0y9BjEk=",
         "usagesDigest": "VoPi3pVP/lBNI1ZxYSVuuaFiXLVdKW7ibC1BLqsSrnE=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
@@ -272,7 +285,7 @@
     },
     "//aptprep/tests:patching_fixture_ext.bzl%patching_fixture": {
       "general": {
-        "bzlTransitiveDigest": "wT3vJBLJO0DaXX3+TZsg5xFSmn8AlU34wsetLXrF8r0=",
+        "bzlTransitiveDigest": "lrD2ENb5RINO2rg7IxSLZRTNjj5iBf+ZR+4Lf0A3CDI=",
         "usagesDigest": "wsLzMHqJ/ZBaqxbD+7248/T8NptEpCEBtQxxAWaNqG4=",
         "recordedInputs": [],
         "generatedRepoSpecs": {

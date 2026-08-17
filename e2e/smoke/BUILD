@@ -5,6 +5,9 @@ Add a basic smoke-test target below.
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@rules_aptprep//aptprep:rules.bzl", "aptprep_lockfile")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load(":extraction_comparison_test.bzl", "extraction_comparison_test_suite")
+
+extraction_comparison_test_suite(name = "extraction_comparison_override_test")
 
 # Generate lockfile from aptprep config using the aptprep binary
 aptprep_lockfile(

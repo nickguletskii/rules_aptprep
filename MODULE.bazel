@@ -41,6 +41,14 @@ bazel_dep(name = "rules_shell", version = "0.8.0", dev_dependency = True)
 bazel_dep(name = "bazel_skylib_gazelle_plugin", version = "1.9.0", dev_dependency = True)
 bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.2", dev_dependency = True)
 
+# Test-only fixture extension for archive directory-path validation.
+archive_extraction_fixture = use_extension(
+    "//aptprep/tests:archive_extraction_fixture_ext.bzl",
+    "archive_extraction_fixture",
+    dev_dependency = True,
+)
+use_repo(archive_extraction_fixture, "aptprep_archive_extraction_fixture")
+
 # Test-only fixture extension for //aptprep/tests:patching_behavior_test.
 # This creates a synthetic sysroot repository that runs `patch_binaries` at
 # repository fetch time and exports observed patch/runtime results.
