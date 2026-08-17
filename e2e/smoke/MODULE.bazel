@@ -32,6 +32,42 @@ aptprep.sysroot(
     ],
     repo_name = "aptprep_smoke_sysroot",
 )
-use_repo(aptprep, "aptprep_binary_archive", "aptprep_smoke_packages", "aptprep_smoke_sysroot", "aptprep_toolchains")
+aptprep.sysroot(
+    archive_extractor = "tar",
+    lockfile_name = "smoke",
+    packages_list = [
+        "bash",
+        "curl",
+    ],
+    patch_binaries = False,
+    repo_name = "aptprep_smoke_sysroot_tar",
+)
+aptprep.sysroot(
+    archive_extractor = "bazel",
+    lockfile_name = "smoke",
+    packages_list = [
+        "bash",
+        "curl",
+    ],
+    patch_binaries = False,
+    repo_name = "aptprep_smoke_sysroot_bazel",
+)
+use_repo(
+    aptprep,
+    "aptprep_binary_archive",
+    "aptprep_smoke_packages",
+    "aptprep_smoke_sysroot",
+    "aptprep_smoke_sysroot_bazel",
+    "aptprep_smoke_sysroot_tar",
+    "aptprep_toolchains",
+)
+
+extraction_comparison = use_extension("//:extraction_comparison_ext.bzl", "extraction_comparison")
+extraction_comparison.compare(
+    name = "aptprep_extraction_comparison",
+    bazel_manifest = "@aptprep_smoke_sysroot_bazel//:install_manifest.json",
+    tar_manifest = "@aptprep_smoke_sysroot_tar//:install_manifest.json",
+)
+use_repo(extraction_comparison, "aptprep_extraction_comparison")
 
 register_toolchains("@aptprep_toolchains//:all")

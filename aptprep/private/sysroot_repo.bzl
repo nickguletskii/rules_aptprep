@@ -117,6 +117,43 @@ def _dirname(path):
         return parts[0]
     return "."
 
+def archive_extractor_for_os(os_name, override = "auto"):
+    """Select the archive extractor for the repository host OS."""
+    if override not in ("auto", "bazel", "tar"):
+        fail("Unknown aptprep archive extractor '{}'; expected auto, bazel, or tar".format(override))
+    if override != "auto":
+        return override
+
+    normalized = os_name.lower()
+    if normalized == "darwin" or normalized == "mac os x":
+        return "bazel"
+    return "tar"
+
+def mode_from_tar_permissions(permissions):
+    """Convert a tar verbose-listing permission field to an octal mode."""
+    if len(permissions) < 10:
+        fail("Invalid tar permission field '{}'".format(permissions))
+
+    digits = []
+    for offset in (1, 4, 7):
+        value = 0
+        if permissions[offset] == "r":
+            value += 4
+        if permissions[offset + 1] == "w":
+            value += 2
+        if permissions[offset + 2] in ("x", "s", "t"):
+            value += 1
+        digits.append(str(value))
+
+    special = 0
+    if permissions[3] in ("s", "S"):
+        special += 4
+    if permissions[6] in ("s", "S"):
+        special += 2
+    if permissions[9] in ("t", "T"):
+        special += 1
+    return "{}{}".format(special, "".join(digits))
+
 def _find_package_key(packages_data, package_name, architecture):
     for package_key, package_info in packages_data.items():
         if package_info["name"] == package_name and package_info["architecture"] == architecture:
@@ -140,6 +177,53 @@ def _list_tar_files(rctx, tar_path, tar_tool):
         if not line.endswith("/"):
             files.append(line)
     return files
+
+def _restore_archive_directory_modes(rctx, tar_path, tar_tool):
+    names_result = rctx.execute([tar_tool, "-tf", str(tar_path)])
+    verbose_result = rctx.execute([tar_tool, "-tvf", str(tar_path)])
+    if names_result.return_code or verbose_result.return_code:
+        fail("Failed to inspect directory modes in tar file {}: ({}, {})".format(
+            tar_path,
+            names_result.stderr,
+            verbose_result.stderr,
+        ))
+
+    names = names_result.stdout.splitlines()
+    verbose_lines = verbose_result.stdout.splitlines()
+    if len(names) != len(verbose_lines):
+        fail("Tar returned different entry counts for normal and verbose listings of {}".format(tar_path))
+
+    directories_by_mode = {}
+    for index in range(len(names)):
+        permissions = verbose_lines[index][:10]
+        if not permissions.startswith("d"):
+            continue
+        mode = mode_from_tar_permissions(permissions)
+        directories_by_mode.setdefault(mode, []).append(names[index])
+
+    chmod = rctx.which("chmod")
+    if not chmod:
+        fail("Could not find `chmod` in PATH; Bazel archive extraction requires it to restore directory modes")
+    for mode, directories in directories_by_mode.items():
+        for start in range(0, len(directories), 256):
+            result = rctx.execute([chmod, mode] + directories[start:start + 256])
+            if result.return_code != 0:
+                fail("Failed to restore directory mode {} from {}: {}".format(mode, tar_path, result.stderr))
+
+def _extract_data_archive(rctx, archive_path, package_key, tar_tool, archive_extractor):
+    # Bazel's extractor avoids host tar filesystem operations that are unreliable
+    # on filesystems exported into Darwin. GNU tar remains faster on Linux.
+    if archive_extractor == "bazel":
+        rctx.extract(
+            archive = archive_path,
+            output = ".",
+        )
+        _restore_archive_directory_modes(rctx, archive_path, str(tar_tool))
+        return
+
+    result = rctx.execute([str(tar_tool), "-xpf", str(archive_path), "-C", "."])
+    if result.return_code != 0:
+        fail("Failed to extract package data archive for {}: {}".format(package_key, result.stderr))
 
 def _fix_sysroot_symlinks(rctx):
     """Fix symlinks in the sysroot to not reference absolute paths and prevent loops."""
@@ -248,10 +332,14 @@ def _aptprep_sysroot_impl(repository_ctx):
     add_files = repository_ctx.attr.add_files
     patch_binaries_enabled = repository_ctx.attr.patch_binaries
     build_file = repository_ctx.attr.build_file
+    extractor_override = repository_ctx.os.environ.get("APTPREP_ARCHIVE_EXTRACTOR", "")
+    if not extractor_override:
+        extractor_override = repository_ctx.attr.archive_extractor
+    archive_extractor = archive_extractor_for_os(repository_ctx.os.name, extractor_override)
 
     tar_tool = repository_ctx.which("tar")
     if not tar_tool:
-        fail("Could not find `tar` in PATH; it is required to extract package data archives")
+        fail("Could not find `tar` in PATH; it is required to inspect package data archives")
 
     # Watch the build file template for changes
     if build_file:
@@ -328,9 +416,7 @@ def _aptprep_sysroot_impl(repository_ctx):
         if not data_archive_path.exists:
             fail("Package data archive '{}' is missing for package key '{}'".format(data_archive_path, package_key))
 
-        extract_result = repository_ctx.execute([str(tar_tool), "-xf", str(data_archive_path), "-C", "."])
-        if extract_result.return_code != 0:
-            fail("Failed to extract package data archive for {}: {}".format(package_key, extract_result.stderr))
+        _extract_data_archive(repository_ctx, data_archive_path, package_key, tar_tool, archive_extractor)
 
         extracted_files = _list_tar_files(repository_ctx, data_archive_path, str(tar_tool))
         manifest[pkg_name] = extracted_files
@@ -396,11 +482,13 @@ def _aptprep_sysroot_impl(repository_ctx):
 
 aptprep_sysroot = repository_rule(
     implementation = _aptprep_sysroot_impl,
+    environ = ["APTPREP_ARCHIVE_EXTRACTOR"],
     attrs = {
         "packages_list": attr.string_list(mandatory = True, doc = "List of package names to include in sysroot"),
         "packages_data": attr.string(mandatory = True, doc = "JSON data of all packages from lockfile"),
         "package_data_archives": attr.string_keyed_label_dict(mandatory = True, doc = "Mapping from lockfile package keys to @repo//:data_archive_filename.txt labels."),
         "architecture": attr.string(mandatory = True, doc = "Target architecture"),
+        "archive_extractor": attr.string(default = "auto", values = ["auto", "bazel", "tar"], doc = "Archive extractor: auto selects Bazel on Darwin and tar elsewhere. APTPREP_ARCHIVE_EXTRACTOR overrides this setting."),
         "build_file": attr.label(doc = "Label of the BUILD file to use for this repository (optional)"),
         "patchelf_dirs": attr.string_list(
             default = DEFAULT_PATCHELF_DIRS,

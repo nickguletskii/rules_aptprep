@@ -70,6 +70,20 @@ aptprep.toolchain(
 )
 ```
 
+Sysroot package archives use GNU tar by default on Linux and Bazel's native
+`repository_ctx.extract` on Darwin. Set `archive_extractor = "tar"` or
+`archive_extractor = "bazel"` on an individual sysroot to override that choice.
+For environments selected outside `MODULE.bazel`, such as a macOS Podman shell,
+the repository environment setting takes precedence:
+
+```text
+build --repo_env=APTPREP_ARCHIVE_EXTRACTOR=bazel
+```
+
+Accepted values are `auto`, `tar`, and `bazel`. Bazel extraction still requires
+`tar` on `PATH` to inspect package archive entries and restore their directory
+permissions; it does not use tar to extract payloads.
+
 This creates two repositories:
 
 - `aptprep_binary_archive`: Contains the downloaded aptprep binary

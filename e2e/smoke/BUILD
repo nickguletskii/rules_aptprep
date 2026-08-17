@@ -30,3 +30,9 @@ sh_test(
         "@aptprep_smoke_sysroot//:files",
     ],
 )
+
+sh_test(
+    name = "compare_extractors_test",
+    srcs = ["compare_extractors_test.sh"],
+    data = ["@aptprep_extraction_comparison//:result.txt"],
+)
